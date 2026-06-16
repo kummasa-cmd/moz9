@@ -6,6 +6,7 @@ import { Send, CheckCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
 
 type FormValues = {
   name: string;
@@ -24,6 +25,7 @@ const socialLinks = [
 
 export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -31,9 +33,21 @@ export default function ContactPage() {
   } = useForm<FormValues>();
 
   const onSubmit = async (data: FormValues) => {
-    // TODO: connect to email service (e.g. Resend, Nodemailer)
-    console.log(data);
-    await new Promise((r) => setTimeout(r, 800));
+    setSubmitError(null);
+    const supabase = createClient();
+    const { error } = await supabase.from("consultations").insert({
+      name: data.name,
+      email: data.email,
+      phone: data.phone || null,
+      subject: data.subject,
+      message: data.message,
+    });
+
+    if (error) {
+      setSubmitError("문의 접수 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+      return;
+    }
+
     setSubmitted(true);
   };
 
@@ -135,6 +149,8 @@ export default function ContactPage() {
                   <p className="text-xs text-destructive">{errors.message.message}</p>
                 )}
               </div>
+
+              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
 
               <button
                 type="submit"
