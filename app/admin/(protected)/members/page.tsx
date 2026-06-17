@@ -23,7 +23,7 @@ export default async function AdminMembersPage() {
   const supabase = await createClient();
   const { data: members, error } = await supabase
     .from("members")
-    .select("id, name, email, phone, grade, status, created_at")
+    .select("id, name, nickname, email, phone, grade, status, created_at")
     .order("created_at", { ascending: false });
 
   return (
@@ -44,6 +44,7 @@ export default async function AdminMembersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>이름</TableHead>
+              <TableHead>닉네임</TableHead>
               <TableHead>이메일</TableHead>
               <TableHead>연락처</TableHead>
               <TableHead>등급</TableHead>
@@ -56,6 +57,7 @@ export default async function AdminMembersPage() {
             {(members ?? []).map((m) => (
               <TableRow key={m.id}>
                 <TableCell className="font-medium">{m.name}</TableCell>
+                <TableCell className="text-muted-foreground">{m.nickname ?? <span className="text-muted-foreground/40">—</span>}</TableCell>
                 <TableCell className="text-muted-foreground">{m.email}</TableCell>
                 <TableCell className="text-muted-foreground">{m.phone ?? "-"}</TableCell>
                 <TableCell className="text-muted-foreground">{m.grade}</TableCell>
@@ -91,7 +93,7 @@ export default async function AdminMembersPage() {
 
             {members && members.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-10">
                   등록된 회원이 없습니다.
                 </TableCell>
               </TableRow>

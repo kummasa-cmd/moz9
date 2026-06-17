@@ -27,11 +27,16 @@ export default async function AdminMemberNewPage({ searchParams }: NewMemberPage
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email">
-              이메일 <span className="text-destructive">*</span>
-            </Label>
-            <Input id="email" name="email" type="email" required placeholder="hello@example.com" />
+            <Label htmlFor="nickname">닉네임</Label>
+            <Input id="nickname" name="nickname" placeholder="커뮤니티 닉네임" />
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="email">
+            이메일 <span className="text-destructive">*</span>
+          </Label>
+          <Input id="email" name="email" type="email" required placeholder="hello@example.com" />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">

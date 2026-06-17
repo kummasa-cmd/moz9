@@ -4,6 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { FormSelect } from "@/components/admin/FormSelect";
 import PageHeader from "@/components/admin/PageHeader";
+import PortfolioImageUpload from "@/components/admin/PortfolioImageUpload";
 import { createPortfolioItem } from "../actions";
 
 type NewPortfolioPageProps = {
@@ -48,6 +49,12 @@ export default async function AdminPortfolioNewPage({ searchParams }: NewPortfol
         <div className="space-y-2">
           <Label htmlFor="link">사이트 링크</Label>
           <Input id="link" name="link" type="url" placeholder="https://example.com" />
+        </div>
+
+        <div className="space-y-2">
+          <Label>썸네일 이미지</Label>
+          <PortfolioImageUpload name="thumbnail_url" />
+          <p className="text-xs text-muted-foreground">JPG, PNG, GIF, WEBP · 최대 5MB</p>
         </div>
 
         <div className="space-y-2">

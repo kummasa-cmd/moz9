@@ -1,33 +1,36 @@
 import { notFound } from "next/navigation";
 import PageHeader from "@/components/admin/PageHeader";
-import BoardPostForm from "@/components/admin/BoardPostForm";
+import BoardForm from "@/components/admin/BoardForm";
 import { createClient } from "@/lib/supabase/server";
-import { updatePost } from "../../actions";
+import { updateBoard } from "../../actions";
 
-type EditPostPageProps = {
+type EditBoardPageProps = {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string }>;
 };
 
-export default async function AdminSiteBoardEditPage({ params, searchParams }: EditPostPageProps) {
+export default async function AdminSiteBoardEditPage({ params, searchParams }: EditBoardPageProps) {
   const { id } = await params;
   const { error } = await searchParams;
 
   const supabase = await createClient();
-  const { data: post } = await supabase
-    .from("board_posts")
-    .select("id, board, title, content, status")
+  const { data: board } = await supabase
+    .from("boards")
+    .select("*")
     .eq("id", id)
     .maybeSingle();
 
-  if (!post) notFound();
+  if (!board) notFound();
 
   return (
-    <div>
-      <PageHeader title="게시물 수정" description={`"${post.title}" 게시물을 수정합니다.`} />
-      <BoardPostForm
-        action={updatePost.bind(null, post.id)}
-        defaultValues={post}
+    <div className="max-w-2xl">
+      <PageHeader
+        title="게시판 수정"
+        description={`"${board.name}" 게시판 설정을 수정합니다.`}
+      />
+      <BoardForm
+        action={updateBoard.bind(null, board.id)}
+        defaultValues={board}
         error={error}
         submitLabel="수정 완료"
       />

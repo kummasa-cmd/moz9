@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function createMember(formData: FormData) {
   const name = String(formData.get("name") ?? "");
+  const nickname = String(formData.get("nickname") ?? "") || null;
   const email = String(formData.get("email") ?? "");
   const phone = String(formData.get("phone") ?? "") || null;
   const grade = String(formData.get("grade") ?? "일반");
@@ -15,7 +16,7 @@ export async function createMember(formData: FormData) {
   const supabase = await createClient();
   const { error } = await supabase
     .from("members")
-    .insert({ name, email, phone, grade, status, memo });
+    .insert({ name, nickname, email, phone, grade, status, memo });
 
   if (error) {
     redirect(`/admin/members/new?error=${encodeURIComponent(error.message)}`);
@@ -27,6 +28,7 @@ export async function createMember(formData: FormData) {
 
 export async function updateMember(id: string, formData: FormData) {
   const name = String(formData.get("name") ?? "");
+  const nickname = String(formData.get("nickname") ?? "") || null;
   const email = String(formData.get("email") ?? "");
   const phone = String(formData.get("phone") ?? "") || null;
   const grade = String(formData.get("grade") ?? "일반");
@@ -36,7 +38,7 @@ export async function updateMember(id: string, formData: FormData) {
   const supabase = await createClient();
   const { error } = await supabase
     .from("members")
-    .update({ name, email, phone, grade, status, memo })
+    .update({ name, nickname, email, phone, grade, status, memo })
     .eq("id", id);
 
   if (error) {

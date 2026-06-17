@@ -62,3 +62,45 @@
     font-family: "Pretendard", var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   }
 }
+
+/* Board post content display */
+.board-content { @apply text-sm leading-relaxed; }
+.board-content > * + * { @apply mt-3; }
+.board-content h2 { @apply text-xl font-bold mt-5 mb-2; }
+.board-content h3 { @apply text-lg font-semibold mt-4 mb-1; }
+.board-content ul { @apply list-disc pl-5 my-2; }
+.board-content ol { @apply list-decimal pl-5 my-2; }
+.board-content li { @apply my-0.5; }
+.board-content blockquote { @apply border-l-4 border-border pl-4 italic text-muted-foreground my-3; }
+.board-content img { @apply max-w-full rounded my-2; }
+.board-content hr { @apply border-t border-border my-5; }
+.board-content strong { @apply font-bold; }
+.board-content em { @apply italic; }
+.board-content code { @apply bg-muted px-1 py-0.5 rounded text-xs font-mono; }
+.board-content p:empty { @apply hidden; }
+
+/* Rich text editor (TipTap) */
+.rich-editor-content .ProseMirror {
+  @apply outline-none text-sm leading-relaxed;
+  min-height: 480px;
+}
+.rich-editor-content .ProseMirror > * + * { @apply mt-2; }
+.rich-editor-content .ProseMirror h2 { @apply text-xl font-bold mt-4 mb-2; }
+.rich-editor-content .ProseMirror h3 { @apply text-lg font-semibold mt-3 mb-1; }
+.rich-editor-content .ProseMirror ul { @apply list-disc pl-5 my-2; }
+.rich-editor-content .ProseMirror ol { @apply list-decimal pl-5 my-2; }
+.rich-editor-content .ProseMirror li { @apply my-0.5; }
+.rich-editor-content .ProseMirror blockquote {
+  @apply border-l-4 border-border pl-4 italic text-muted-foreground my-3;
+}
+.rich-editor-content .ProseMirror img { @apply max-w-full rounded my-2; }
+.rich-editor-content .ProseMirror hr { @apply border-t border-border my-4; }
+.rich-editor-content .ProseMirror strong { @apply font-bold; }
+.rich-editor-content .ProseMirror em { @apply italic; }
+.rich-editor-content .ProseMirror code {
+  @apply bg-muted px-1 py-0.5 rounded text-xs font-mono;
+}
+.rich-editor-content .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply text-muted-foreground pointer-events-none float-left h-0;
+}

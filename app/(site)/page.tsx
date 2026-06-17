@@ -1,26 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, BookOpen, Globe, TrendingUp } from "lucide-react";
-
-const featuredWorks = [
-  {
-    title: "작가 개인 브랜딩 사이트",
-    category: "홈페이지 제작",
-    description: "베스트셀러 작가의 개인 브랜딩과 강연 문의를 위한 사이트",
-    tags: ["Next.js", "Tailwind CSS"],
-  },
-  {
-    title: "전문직 1인 사업가 포트폴리오",
-    category: "포트폴리오",
-    description: "세무사의 전문성을 강조한 신뢰감 있는 포트폴리오 사이트",
-    tags: ["SEO", "반응형"],
-  },
-  {
-    title: "온라인 강의 랜딩 페이지",
-    category: "랜딩 페이지",
-    description: "전환율 최적화를 위한 온라인 강의 홍보 랜딩 페이지",
-    tags: ["전환율 최적화", "CTA"],
-  },
-];
+import { createClient } from "@/lib/supabase/server";
+import { getOgImage } from "@/lib/og-image";
 
 const services = [
   {
@@ -40,7 +21,24 @@ const services = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const supabase = await createClient();
+  const { data: portfolios } = await supabase
+    .from("portfolio_items")
+    .select("id, title, category, description, link, thumbnail_url")
+    .eq("status", "공개")
+    .order("created_at", { ascending: false })
+    .limit(3);
+
+  const featuredWorks = await Promise.all(
+    (portfolios ?? []).map(async (p) => {
+      let imageUrl: string | null = p.thumbnail_url ?? null;
+      if (!imageUrl && p.link) {
+        imageUrl = await getOgImage(p.link);
+      }
+      return { ...p, imageUrl };
+    })
+  );
   return (
     <>
       {/* Hero */}
@@ -113,33 +111,53 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {featuredWorks.map((work) => (
-              <div
-                key={work.title}
-                className="rounded-xl border border-border bg-white p-6 hover:shadow-md transition-shadow"
-              >
-                <div className="h-40 rounded-lg bg-gradient-to-br from-blue-100 to-blue-50 mb-4 flex items-center justify-center">
-                  <Globe size={36} className="text-primary/40" />
-                </div>
-                <p className="text-xs font-medium text-accent uppercase tracking-wider mb-1">
-                  {work.category}
-                </p>
-                <h3 className="font-semibold text-foreground mb-2">{work.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-                  {work.description}
-                </p>
-                <div className="flex gap-2 flex-wrap">
-                  {work.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="text-xs px-2 py-1 rounded-md bg-muted text-muted-foreground"
+            {featuredWorks.map((work) => {
+              const Wrapper = work.link
+                ? ({ children }: { children: React.ReactNode }) => (
+                    <a
+                      href={work.link!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-xl border border-border bg-white overflow-hidden hover:shadow-md transition-shadow group block"
                     >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
+                      {children}
+                    </a>
+                  )
+                : ({ children }: { children: React.ReactNode }) => (
+                    <div className="rounded-xl border border-border bg-white overflow-hidden hover:shadow-md transition-shadow group">
+                      {children}
+                    </div>
+                  );
+
+              return (
+                <Wrapper key={work.id}>
+                  <div className="h-40 overflow-hidden bg-gradient-to-br from-blue-100 to-blue-50">
+                    {work.imageUrl ? (
+                      <img
+                        src={work.imageUrl}
+                        alt={work.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Globe size={36} className="text-primary/20" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-5">
+                    <p className="text-xs font-medium text-accent uppercase tracking-wider mb-1">
+                      {work.category}
+                    </p>
+                    <h3 className="font-semibold text-foreground mb-2">{work.title}</h3>
+                    {work.description && (
+                      <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">
+                        {work.description}
+                      </p>
+                    )}
+                  </div>
+                </Wrapper>
+              );
+            })}
           </div>
 
           <div className="mt-6 text-center sm:hidden">
@@ -161,7 +179,7 @@ export default function HomePage() {
               About
             </p>
             <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-4">
-              홍성호를 소개합니다
+              모즈나인을 소개합니다
             </h2>
             <p className="text-muted-foreground leading-relaxed">
               25년간 개발자로 일하며 책을 쓰고, 강의하고, 1인 사업을 운영했습니다.

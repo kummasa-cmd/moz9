@@ -20,7 +20,7 @@ export default async function AdminMemberEditPage({ params, searchParams }: Edit
   const supabase = await createClient();
   const { data: member } = await supabase
     .from("members")
-    .select("id, name, email, phone, grade, status, memo")
+    .select("id, name, nickname, email, phone, grade, status, memo")
     .eq("id", id)
     .maybeSingle();
 
@@ -43,11 +43,16 @@ export default async function AdminMemberEditPage({ params, searchParams }: Edit
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email">
-              이메일 <span className="text-destructive">*</span>
-            </Label>
-            <Input id="email" name="email" type="email" required defaultValue={member.email} />
+            <Label htmlFor="nickname">닉네임</Label>
+            <Input id="nickname" name="nickname" defaultValue={member.nickname ?? ""} />
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="email">
+            이메일 <span className="text-destructive">*</span>
+          </Label>
+          <Input id="email" name="email" type="email" required defaultValue={member.email} />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">

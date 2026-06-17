@@ -4,14 +4,33 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-export async function createPost(formData: FormData) {
-  const board = String(formData.get("board") ?? "공지사항");
-  const title = String(formData.get("title") ?? "");
-  const content = String(formData.get("content") ?? "");
-  const status = String(formData.get("status") ?? "게시중");
+export async function createBoard(formData: FormData) {
+  const name = String(formData.get("name") ?? "").trim();
+  const slug = String(formData.get("slug") ?? "").trim();
+  const type = String(formData.get("type") ?? "일반");
+  const sort_order = parseInt(String(formData.get("sort_order") ?? "0"), 10) || 0;
+  const is_visible = formData.get("is_visible") === "on";
+  const allow_user_write = formData.get("allow_user_write") === "on";
+  const use_category = formData.get("use_category") === "on";
+  const use_comment = formData.get("use_comment") === "on";
+
+  if (!/^[a-z0-9-]+$/.test(slug)) {
+    redirect(
+      `/admin/site/board/new?error=${encodeURIComponent("슬러그는 영소문자, 숫자, 하이픈만 사용 가능합니다.")}`
+    );
+  }
 
   const supabase = await createClient();
-  const { error } = await supabase.from("board_posts").insert({ board, title, content, status });
+  const { error } = await supabase.from("boards").insert({
+    name,
+    slug,
+    type,
+    sort_order,
+    is_visible,
+    allow_user_write,
+    use_category,
+    use_comment,
+  });
 
   if (error) {
     redirect(`/admin/site/board/new?error=${encodeURIComponent(error.message)}`);
@@ -21,16 +40,26 @@ export async function createPost(formData: FormData) {
   redirect("/admin/site/board");
 }
 
-export async function updatePost(id: string, formData: FormData) {
-  const board = String(formData.get("board") ?? "공지사항");
-  const title = String(formData.get("title") ?? "");
-  const content = String(formData.get("content") ?? "");
-  const status = String(formData.get("status") ?? "게시중");
+export async function updateBoard(id: string, formData: FormData) {
+  const name = String(formData.get("name") ?? "").trim();
+  const slug = String(formData.get("slug") ?? "").trim();
+  const type = String(formData.get("type") ?? "일반");
+  const sort_order = parseInt(String(formData.get("sort_order") ?? "0"), 10) || 0;
+  const is_visible = formData.get("is_visible") === "on";
+  const allow_user_write = formData.get("allow_user_write") === "on";
+  const use_category = formData.get("use_category") === "on";
+  const use_comment = formData.get("use_comment") === "on";
+
+  if (!/^[a-z0-9-]+$/.test(slug)) {
+    redirect(
+      `/admin/site/board/${id}/edit?error=${encodeURIComponent("슬러그는 영소문자, 숫자, 하이픈만 사용 가능합니다.")}`
+    );
+  }
 
   const supabase = await createClient();
   const { error } = await supabase
-    .from("board_posts")
-    .update({ board, title, content, status })
+    .from("boards")
+    .update({ name, slug, type, sort_order, is_visible, allow_user_write, use_category, use_comment })
     .eq("id", id);
 
   if (error) {
@@ -41,11 +70,9 @@ export async function updatePost(id: string, formData: FormData) {
   redirect("/admin/site/board");
 }
 
-export async function deletePost(formData: FormData) {
+export async function deleteBoard(formData: FormData) {
   const id = String(formData.get("id") ?? "");
-
   const supabase = await createClient();
-  await supabase.from("board_posts").delete().eq("id", id);
-
+  await supabase.from("boards").delete().eq("id", id);
   revalidatePath("/admin/site/board");
 }

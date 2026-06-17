@@ -1,57 +1,47 @@
 import type { Metadata } from "next";
-import { ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { ExternalLink, Globe } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { getOgImage } from "@/lib/og-image";
 
 export const metadata: Metadata = {
   title: "제작사례 | 모즈나인",
   description: "모즈나인이 제작한 홈페이지 및 디지털 콘텐츠 포트폴리오",
 };
 
-const works = [
-  {
-    title: "작가 개인 브랜딩 사이트",
-    category: "홈페이지 제작",
-    description:
-      "베스트셀러 작가의 개인 브랜딩과 강연 문의를 위한 사이트. 심플하고 신뢰감 있는 디자인으로 방문자를 강연 문의로 연결합니다.",
-    tags: ["Next.js", "Tailwind CSS", "SEO"],
-    link: null,
-  },
-  {
-    title: "세무사 포트폴리오 사이트",
-    category: "포트폴리오",
-    description:
-      "세무사의 전문성을 강조한 신뢰감 있는 포트폴리오 사이트. 고객 후기와 서비스 소개를 중심으로 구성하였습니다.",
-    tags: ["SEO", "반응형", "Google Analytics"],
-    link: null,
-  },
-  {
-    title: "온라인 강의 랜딩 페이지",
-    category: "랜딩 페이지",
-    description:
-      "전환율 최적화를 위한 온라인 강의 홍보 랜딩 페이지. CTA 버튼 클릭률 42% 달성.",
-    tags: ["전환율 최적화", "CTA", "A/B 테스트"],
-    link: null,
-  },
-  {
-    title: "1인 코치 개인 브랜딩",
-    category: "홈페이지 제작",
-    description:
-      "커리어 코치의 개인 브랜딩 사이트. 코칭 프로그램 소개와 후기를 중심으로 구성하였습니다.",
-    tags: ["Next.js", "반응형", "SEO"],
-    link: null,
-  },
-  {
-    title: "출판사 작가 소개 페이지",
-    category: "콘텐츠 제작",
-    description:
-      "출판사의 소속 작가 3인을 소개하는 미니 사이트. 각 작가의 책과 강연 일정을 안내합니다.",
-    tags: ["콘텐츠 전략", "디자인"],
-    link: null,
-  },
-];
-
 const categories = ["전체", "홈페이지 제작", "랜딩 페이지", "포트폴리오", "콘텐츠 제작"];
 
-export default function WorksPage() {
+type Props = {
+  searchParams: Promise<{ category?: string }>;
+};
+
+export default async function WorksPage({ searchParams }: Props) {
+  const { category } = await searchParams;
+  const activeCategory = categories.includes(category ?? "") ? category! : "전체";
+
+  const supabase = await createClient();
+  let query = supabase
+    .from("portfolio_items")
+    .select("id, title, category, description, link, thumbnail_url")
+    .eq("status", "공개")
+    .order("created_at", { ascending: false });
+
+  if (activeCategory !== "전체") {
+    query = query.eq("category", activeCategory);
+  }
+
+  const { data: portfolios } = await query;
+
+  const works = await Promise.all(
+    (portfolios ?? []).map(async (p) => {
+      let imageUrl: string | null = p.thumbnail_url ?? null;
+      if (!imageUrl && p.link) {
+        imageUrl = await getOgImage(p.link);
+      }
+      return { ...p, imageUrl };
+    })
+  );
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
       {/* Header */}
@@ -63,66 +53,82 @@ export default function WorksPage() {
         </p>
       </div>
 
-      {/* Category filter (static display - can be made interactive) */}
+      {/* Category filter */}
       <div className="flex flex-wrap gap-2 mb-10">
-        {categories.map((cat, i) => (
-          <span
-            key={cat}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors cursor-pointer ${
-              i === 0
-                ? "bg-primary text-white border-primary"
-                : "border-border text-muted-foreground hover:border-primary hover:text-primary"
-            }`}
-          >
-            {cat}
-          </span>
-        ))}
+        {categories.map((cat) => {
+          const href = cat === "전체" ? "/works" : `/works?category=${encodeURIComponent(cat)}`;
+          const isActive = cat === activeCategory;
+          return (
+            <Link
+              key={cat}
+              href={href}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                isActive
+                  ? "bg-primary text-white border-primary"
+                  : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+              }`}
+            >
+              {cat}
+            </Link>
+          );
+        })}
       </div>
 
       {/* Works grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {works.map((work) => (
-          <div
-            key={work.title}
-            className="rounded-xl border border-border bg-white overflow-hidden hover:shadow-md transition-shadow group"
-          >
-            {/* Thumbnail placeholder */}
-            <div className="h-48 bg-gradient-to-br from-blue-100 via-blue-50 to-amber-50 flex items-center justify-center">
-              <span className="text-primary/30 text-4xl font-bold">M9</span>
-            </div>
-
-            <div className="p-5">
-              <p className="text-xs font-medium text-accent uppercase tracking-wider mb-1">
-                {work.category}
-              </p>
-              <h3 className="font-semibold text-foreground mb-2">{work.title}</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed mb-4">{work.description}</p>
-
-              <div className="flex flex-wrap gap-2 mb-4">
-                {work.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="text-xs px-2 py-1 rounded-md bg-muted text-muted-foreground"
-                  >
-                    {tag}
-                  </span>
-                ))}
+      {works.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {works.map((work) => (
+            <div
+              key={work.id}
+              className="rounded-xl border border-border bg-white overflow-hidden hover:shadow-md transition-shadow group"
+            >
+              {/* Thumbnail */}
+              <div className="h-48 overflow-hidden bg-gradient-to-br from-blue-100 via-blue-50 to-amber-50">
+                {work.imageUrl ? (
+                  <img
+                    src={work.imageUrl}
+                    alt={work.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Globe size={40} className="text-primary/20" />
+                  </div>
+                )}
               </div>
 
-              {work.link && (
-                <a
-                  href={work.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-sm text-primary font-medium hover:underline"
-                >
-                  사이트 보기 <ExternalLink size={13} />
-                </a>
-              )}
+              <div className="p-5">
+                <p className="text-xs font-medium text-accent uppercase tracking-wider mb-1">
+                  {work.category}
+                </p>
+                <h3 className="font-semibold text-foreground mb-2">{work.title}</h3>
+                {work.description && (
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-4 line-clamp-3">
+                    {work.description}
+                  </p>
+                )}
+
+                {work.link && (
+                  <a
+                    href={work.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-sm text-primary font-medium hover:underline"
+                  >
+                    사이트 보기 <ExternalLink size={13} />
+                  </a>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-20 text-muted-foreground">
+          {activeCategory === "전체"
+            ? "등록된 포트폴리오가 없습니다."
+            : `'${activeCategory}' 카테고리에 등록된 포트폴리오가 없습니다.`}
+        </div>
+      )}
     </div>
   );
 }
