@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import PageHeader from "@/components/admin/PageHeader";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { deleteBoardPost } from "./actions";
 
 type Props = {
@@ -20,7 +20,7 @@ type Props = {
 
 export default async function AdminBoardPostsPage({ params }: Props) {
   const { id } = await params;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const [{ data: board }, { data: posts, error }, { data: categories }] = await Promise.all([
     supabase.from("boards").select("id, name, use_category, use_comment").eq("id", id).maybeSingle(),

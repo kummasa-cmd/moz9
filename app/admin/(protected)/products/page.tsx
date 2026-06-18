@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 function statusVariant(status: string) {
   return status === "판매중" ? ("default" as const) : ("secondary" as const);
@@ -22,7 +22,7 @@ function formatPrice(setupFee: string | null, monthlyFee: string | null) {
 }
 
 export default async function AdminProductsPage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data: products, error } = await supabase
     .from("products")
     .select("id, name, type, setup_fee, monthly_fee, status")

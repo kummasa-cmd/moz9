@@ -8,14 +8,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 function statusVariant(status: string) {
   return status === "답변완료" ? ("default" as const) : ("destructive" as const);
 }
 
 export default async function AdminConsultingPage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data: consultations, error } = await supabase
     .from("consultations")
     .select("id, name, subject, channel, status, created_at")

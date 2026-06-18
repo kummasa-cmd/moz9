@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Pencil, Trash2, Lock, ChevronLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/server";
-import { isAdmin, canEdit } from "@/lib/community-auth";
+import { isAdmin } from "@/lib/community-auth";
 import { deletePost } from "./actions";
 
 type Props = {
@@ -14,7 +14,7 @@ export default async function CommunityBoardPage({ params }: Props) {
   const { slug } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const admin = isAdmin(user);
+  const admin = await isAdmin();
 
   const { data: board } = await supabase
     .from("boards")
@@ -92,7 +92,7 @@ export default async function CommunityBoardPage({ params }: Props) {
         {posts && posts.length > 0 ? (
           <ul className="divide-y divide-border">
             {posts.map((post) => {
-              const editable = canEdit(user, post.user_id);
+              const editable = admin || (user !== null && user.id === post.user_id);
               return (
                 <li
                   key={post.id}

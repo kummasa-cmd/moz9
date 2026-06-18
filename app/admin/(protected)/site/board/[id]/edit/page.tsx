@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import PageHeader from "@/components/admin/PageHeader";
 import BoardForm from "@/components/admin/BoardForm";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { updateBoard } from "../../actions";
 
 type EditBoardPageProps = {
@@ -13,7 +13,7 @@ export default async function AdminSiteBoardEditPage({ params, searchParams }: E
   const { id } = await params;
   const { error } = await searchParams;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data: board } = await supabase
     .from("boards")
     .select("*")

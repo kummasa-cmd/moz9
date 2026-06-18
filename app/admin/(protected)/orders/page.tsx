@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 function statusVariant(status: string) {
   if (status === "결제완료") return "default" as const;
@@ -17,7 +17,7 @@ function statusVariant(status: string) {
 }
 
 export default async function AdminOrdersPage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data: orders, error } = await supabase
     .from("orders")
     .select("id, order_no, customer, product, amount, status, created_at")

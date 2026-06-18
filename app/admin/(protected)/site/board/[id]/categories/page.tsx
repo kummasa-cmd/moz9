@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import PageHeader from "@/components/admin/PageHeader";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createCategory, deleteCategory } from "./actions";
 
 type Props = {
@@ -23,7 +23,7 @@ type Props = {
 export default async function AdminBoardCategoriesPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { error } = await searchParams;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const [{ data: board }, { data: categories }] = await Promise.all([
     supabase.from("boards").select("id, name").eq("id", id).maybeSingle(),

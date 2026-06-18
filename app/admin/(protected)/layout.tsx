@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import AdminShell from "@/components/admin/AdminShell";
-import { createClient } from "@/lib/supabase/server";
+import { getAdminSession } from "@/lib/admin-auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata: Metadata = {
   title: "관리자 | 모즈나인",
@@ -12,18 +14,15 @@ export default async function AdminLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
+  const adminId = await getAdminSession();
+  if (!adminId) redirect("/admin/login");
 
-  let adminName: string | undefined;
-  if (auth.user) {
-    const { data: profile } = await supabase
-      .from("admin_profiles")
-      .select("name")
-      .eq("id", auth.user.id)
-      .maybeSingle();
-    adminName = profile?.name ?? auth.user.email ?? undefined;
-  }
+  const supabase = createAdminClient();
+  const { data: admin } = await supabase
+    .from("admins")
+    .select("name")
+    .eq("id", adminId)
+    .maybeSingle();
 
-  return <AdminShell adminName={adminName}>{children}</AdminShell>;
+  return <AdminShell adminName={admin?.name ?? undefined}>{children}</AdminShell>;
 }

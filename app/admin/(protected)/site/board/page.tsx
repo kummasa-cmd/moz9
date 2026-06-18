@@ -10,11 +10,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import PageHeader from "@/components/admin/PageHeader";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { deleteBoard } from "./actions";
 
 export default async function AdminSiteBoardPage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const [{ data: boards, error }, { data: postCountData }] = await Promise.all([
     supabase.from("boards").select("*").order("sort_order", { ascending: true }),

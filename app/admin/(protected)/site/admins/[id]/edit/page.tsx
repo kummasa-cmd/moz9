@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormSelect } from "@/components/admin/FormSelect";
 import PageHeader from "@/components/admin/PageHeader";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { updateAdmin } from "../../actions";
 
 type EditAdminPageProps = {
@@ -16,7 +16,7 @@ export default async function AdminSiteAdminEditPage({ params, searchParams }: E
   const { id } = await params;
   const { error } = await searchParams;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data: admin } = await supabase
     .from("admin_profiles")
     .select("id, name, email, role")

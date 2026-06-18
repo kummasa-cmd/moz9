@@ -2,12 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function replyInquiry(id: string, formData: FormData) {
   const answer = String(formData.get("answer") ?? "");
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("inquiries")
     .update({ answer, status: "답변완료", answered_at: new Date().toISOString() })

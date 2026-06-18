@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 function generateOrderNo() {
   const year = new Date().getFullYear();
@@ -17,7 +17,7 @@ export async function createOrder(formData: FormData) {
   const status = String(formData.get("status") ?? "결제대기");
   const memo = String(formData.get("memo") ?? "") || null;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("orders")
     .insert({ order_no: generateOrderNo(), customer, product, amount, status, memo });

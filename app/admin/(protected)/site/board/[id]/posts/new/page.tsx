@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import PageHeader from "@/components/admin/PageHeader";
 import BoardPostEntryForm from "@/components/admin/BoardPostEntryForm";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createBoardPost } from "../actions";
 
 type Props = {
@@ -14,7 +14,7 @@ type Props = {
 export default async function AdminBoardPostNewPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { error } = await searchParams;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: board } = await supabase
     .from("boards")

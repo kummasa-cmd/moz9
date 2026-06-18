@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { addComment, deleteComment } from "./actions";
 
 type Props = {
@@ -24,7 +24,7 @@ type Comment = {
 export default async function AdminBoardPostDetailPage({ params, searchParams }: Props) {
   const { id: boardId, postId } = await params;
   const { reply: replyToId } = await searchParams;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const [{ data: board }, { data: post }, { data: rawComments }] = await Promise.all([
     supabase.from("boards").select("id, name, use_comment").eq("id", boardId).maybeSingle(),

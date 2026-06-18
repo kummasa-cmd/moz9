@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { FormSelect } from "@/components/admin/FormSelect";
 import PageHeader from "@/components/admin/PageHeader";
 import PortfolioImageUpload from "@/components/admin/PortfolioImageUpload";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { updatePortfolioItem } from "../../actions";
 
 type Props = {
@@ -18,7 +18,7 @@ export default async function AdminPortfolioEditPage({ params, searchParams }: P
   const { id } = await params;
   const { error } = await searchParams;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data: item } = await supabase
     .from("portfolio_items")
     .select("id, title, category, status, link, description, thumbnail_url")

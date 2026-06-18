@@ -57,7 +57,7 @@ export async function deleteComment(formData: FormData) {
     .eq("id", commentId)
     .maybeSingle();
 
-  const admin = isAdmin(user);
+  const admin = await isAdmin();
   if (!admin && comment?.user_id !== user.id) return;
 
   await supabase.from("board_comments").delete().eq("id", commentId);

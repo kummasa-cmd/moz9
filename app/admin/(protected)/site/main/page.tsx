@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import PageHeader from "@/components/admin/PageHeader";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { updateSiteSettings } from "./actions";
 
 type SiteMainPageProps = {
@@ -12,7 +12,7 @@ type SiteMainPageProps = {
 
 export default async function AdminSiteMainPage({ searchParams }: SiteMainPageProps) {
   const { saved, error } = await searchParams;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("site_settings")
     .select("*")

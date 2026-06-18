@@ -4,7 +4,7 @@ import { ArrowLeft, Save } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import PageHeader from "@/components/admin/PageHeader";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { updateCategory } from "../../actions";
 
 type Props = {
@@ -15,7 +15,7 @@ type Props = {
 export default async function AdminCategoryEditPage({ params, searchParams }: Props) {
   const { id, catId } = await params;
   const { error } = await searchParams;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const [{ data: board }, { data: category }] = await Promise.all([
     supabase.from("boards").select("id, name").eq("id", id).maybeSingle(),

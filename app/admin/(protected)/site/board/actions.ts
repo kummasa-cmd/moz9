@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function createBoard(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
@@ -20,7 +20,7 @@ export async function createBoard(formData: FormData) {
     );
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase.from("boards").insert({
     name,
     slug,
@@ -56,7 +56,7 @@ export async function updateBoard(id: string, formData: FormData) {
     );
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("boards")
     .update({ name, slug, type, sort_order, is_visible, allow_user_write, use_category, use_comment })
@@ -72,7 +72,7 @@ export async function updateBoard(id: string, formData: FormData) {
 
 export async function deleteBoard(formData: FormData) {
   const id = String(formData.get("id") ?? "");
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   await supabase.from("boards").delete().eq("id", id);
   revalidatePath("/admin/site/board");
 }

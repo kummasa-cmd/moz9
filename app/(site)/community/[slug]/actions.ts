@@ -64,7 +64,7 @@ export async function updatePost(slug: string, postId: string, formData: FormDat
     .eq("id", postId)
     .maybeSingle();
 
-  if (!canEdit(user, post?.user_id ?? null)) redirect(`/community/${slug}/${postId}`);
+  if (!(await canEdit(user, post?.user_id ?? null))) redirect(`/community/${slug}/${postId}`);
 
   await supabase.from("board_posts").update({ title, content }).eq("id", postId);
 
@@ -87,7 +87,7 @@ export async function deletePost(formData: FormData) {
     .eq("id", postId)
     .maybeSingle();
 
-  if (!canEdit(user, post?.user_id ?? null)) return;
+  if (!(await canEdit(user, post?.user_id ?? null))) return;
 
   await supabase.from("board_posts").delete().eq("id", postId);
 

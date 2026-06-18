@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { deletePortfolioItem } from "./actions";
 
 function statusVariant(status: string) {
@@ -18,7 +18,7 @@ function statusVariant(status: string) {
 }
 
 export default async function AdminPortfolioPage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data: portfolios, error } = await supabase
     .from("portfolio_items")
     .select("id, title, category, status, created_at, thumbnail_url")

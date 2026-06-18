@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 function statusVariant(status: string) {
   if (["정상", "결제완료", "답변완료", "판매중"].includes(status)) return "default" as const;
@@ -19,7 +19,7 @@ function statusVariant(status: string) {
 }
 
 export default async function AdminDashboardPage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const [
     { count: memberCount },

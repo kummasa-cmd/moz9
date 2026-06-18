@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/server";
-import { isAdmin, canEdit } from "@/lib/community-auth";
+import { isAdmin } from "@/lib/community-auth";
 import { deletePost } from "../actions";
 import { addComment, deleteComment } from "./actions";
 
@@ -29,7 +29,7 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const admin = isAdmin(user);
+  const admin = await isAdmin();
 
   const { data: board } = await supabase
     .from("boards")
@@ -85,7 +85,7 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
     }
   }
 
-  const editable = canEdit(user, post.user_id);
+  const editable = admin || (user !== null && user.id === post.user_id);
   const displayDate = new Date(post.published_at ?? post.created_at).toLocaleDateString("ko-KR", {
     year: "numeric", month: "long", day: "numeric",
   });
@@ -169,7 +169,7 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
             {topComments.map((c) => {
               const replies = replyMap.get(c.id) ?? [];
               const isReplyTarget = replyToId === c.id;
-              const canDeleteComment = user && (isAdmin(user) || c.user_id === user.id);
+              const canDeleteComment = admin || (user && c.user_id === user.id);
 
               return (
                 <div key={c.id} className="rounded-xl border border-border bg-white overflow-hidden">
@@ -205,7 +205,7 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
                   </div>
 
                   {replies.map((r) => {
-                    const canDeleteReply = user && (isAdmin(user) || r.user_id === user.id);
+                    const canDeleteReply = admin || (user && r.user_id === user.id);
                     return (
                       <div key={r.id} className="px-5 py-3 border-t border-border bg-muted/30 flex items-start justify-between gap-2">
                         <div className="flex gap-2 min-w-0">

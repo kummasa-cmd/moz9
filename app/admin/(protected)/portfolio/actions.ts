@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function createPortfolioItem(formData: FormData) {
   const title = String(formData.get("title") ?? "");
@@ -12,7 +12,7 @@ export async function createPortfolioItem(formData: FormData) {
   const description = String(formData.get("description") ?? "");
   const thumbnail_url = String(formData.get("thumbnail_url") ?? "") || null;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("portfolio_items")
     .insert({ title, category, status, link, description, thumbnail_url });
@@ -33,7 +33,7 @@ export async function updatePortfolioItem(id: string, formData: FormData) {
   const description = String(formData.get("description") ?? "");
   const thumbnail_url = String(formData.get("thumbnail_url") ?? "") || null;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("portfolio_items")
     .update({ title, category, status, link, description, thumbnail_url })
@@ -50,7 +50,7 @@ export async function updatePortfolioItem(id: string, formData: FormData) {
 export async function deletePortfolioItem(formData: FormData) {
   const id = String(formData.get("id") ?? "");
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   await supabase.from("portfolio_items").delete().eq("id", id);
 
   revalidatePath("/admin/portfolio");

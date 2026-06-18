@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { Pencil, Save, Trash2 } from "lucide-react";
+import { Save, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormSelect } from "@/components/admin/FormSelect";
@@ -11,7 +10,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getAdminSession } from "@/lib/admin-auth";
 import { createAdmin, deleteAdmin } from "./actions";
 
 type AdminsPageProps = {
@@ -20,10 +20,11 @@ type AdminsPageProps = {
 
 export default async function AdminSiteAdminsPage({ searchParams }: AdminsPageProps) {
   const { error } = await searchParams;
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
+  const sessionAdminId = await getAdminSession();
+
+  const supabase = createAdminClient();
   const { data: admins } = await supabase
-    .from("admin_profiles")
+    .from("admins")
     .select("id, name, email, role, created_at")
     .order("created_at", { ascending: true });
 
@@ -62,7 +63,7 @@ export default async function AdminSiteAdminsPage({ searchParams }: AdminsPagePr
               <Label htmlFor="password">
                 비밀번호 <span className="text-destructive">*</span>
               </Label>
-              <Input id="password" name="password" type="password" required minLength={8} />
+              <Input id="password" name="password" type="password" required minLength={6} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="role">권한</Label>
@@ -106,27 +107,18 @@ export default async function AdminSiteAdminsPage({ searchParams }: AdminsPagePr
                   {new Date(a.created_at).toLocaleDateString("ko-KR")}
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="inline-flex items-center gap-3">
-                    <Link
-                      href={`/admin/site/admins/${a.id}/edit`}
-                      className="text-muted-foreground hover:text-primary transition-colors"
-                      aria-label="수정"
-                    >
-                      <Pencil size={15} />
-                    </Link>
-                    {auth.user?.id !== a.id && (
-                      <form action={deleteAdmin}>
-                        <input type="hidden" name="id" value={a.id} />
-                        <button
-                          type="submit"
-                          className="text-muted-foreground hover:text-destructive transition-colors"
-                          aria-label="삭제"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </form>
-                    )}
-                  </div>
+                  {sessionAdminId !== a.id && (
+                    <form action={deleteAdmin}>
+                      <input type="hidden" name="id" value={a.id} />
+                      <button
+                        type="submit"
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                        aria-label="삭제"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </form>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

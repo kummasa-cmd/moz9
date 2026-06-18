@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function createBoardPost(boardId: string, formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
@@ -13,7 +13,7 @@ export async function createBoardPost(boardId: string, formData: FormData) {
   const published_at = String(formData.get("published_at") ?? "") || null;
   const is_notice = formData.get("is_notice") === "on";
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase.from("board_posts").insert({
     board_id: boardId,
     title,
@@ -45,7 +45,7 @@ export async function updateBoardPost(boardId: string, postId: string, formData:
   const published_at = String(formData.get("published_at") ?? "") || null;
   const is_notice = formData.get("is_notice") === "on";
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("board_posts")
     .update({ title, content, status, category_id, author, published_at, is_notice })
@@ -66,7 +66,7 @@ export async function deleteBoardPost(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const boardId = String(formData.get("board_id") ?? "");
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   await supabase.from("board_posts").delete().eq("id", id);
 
   revalidatePath(`/admin/site/board/${boardId}/posts`);

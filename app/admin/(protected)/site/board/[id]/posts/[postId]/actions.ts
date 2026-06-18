@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function addComment(boardId: string, postId: string, formData: FormData) {
   const author_name = String(formData.get("author_name") ?? "").trim() || "관리자";
@@ -10,7 +10,7 @@ export async function addComment(boardId: string, postId: string, formData: Form
 
   if (!content) return;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   await supabase.from("board_comments").insert({
     post_id: postId,
     parent_id,
@@ -26,7 +26,7 @@ export async function deleteComment(formData: FormData) {
   const boardId = String(formData.get("board_id") ?? "");
   const postId = String(formData.get("post_id") ?? "");
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   await supabase.from("board_comments").delete().eq("id", id);
 
   revalidatePath(`/admin/site/board/${boardId}/posts/${postId}`);

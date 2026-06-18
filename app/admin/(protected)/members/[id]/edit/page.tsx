@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { FormSelect } from "@/components/admin/FormSelect";
 import PageHeader from "@/components/admin/PageHeader";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { updateMember } from "../../actions";
 
 type EditMemberPageProps = {
@@ -17,7 +17,7 @@ export default async function AdminMemberEditPage({ params, searchParams }: Edit
   const { id } = await params;
   const { error } = await searchParams;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data: member } = await supabase
     .from("members")
     .select("id, name, nickname, email, phone, grade, status, memo")

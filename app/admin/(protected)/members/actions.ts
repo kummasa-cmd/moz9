@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function createMember(formData: FormData) {
   const name = String(formData.get("name") ?? "");
@@ -13,7 +13,7 @@ export async function createMember(formData: FormData) {
   const status = String(formData.get("status") ?? "정상");
   const memo = String(formData.get("memo") ?? "") || null;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("members")
     .insert({ name, nickname, email, phone, grade, status, memo });
@@ -35,7 +35,7 @@ export async function updateMember(id: string, formData: FormData) {
   const status = String(formData.get("status") ?? "정상");
   const memo = String(formData.get("memo") ?? "") || null;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("members")
     .update({ name, nickname, email, phone, grade, status, memo })
@@ -52,7 +52,7 @@ export async function updateMember(id: string, formData: FormData) {
 export async function deleteMember(formData: FormData) {
   const id = String(formData.get("id") ?? "");
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   await supabase.from("members").delete().eq("id", id);
 
   revalidatePath("/admin/members");

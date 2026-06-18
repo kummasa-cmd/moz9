@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import PageHeader from "@/components/admin/PageHeader";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { replyInquiry } from "./actions";
 
 function statusVariant(status: string) {
@@ -26,7 +26,7 @@ type InquiryPageProps = {
 export default async function AdminConsultingInquiryPage({ searchParams }: InquiryPageProps) {
   const { id, error } = await searchParams;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data: inquiries } = await supabase
     .from("inquiries")
     .select("id, member_name, question, answer, status, created_at")

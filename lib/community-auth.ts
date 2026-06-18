@@ -1,13 +1,16 @@
 import type { User } from "@supabase/supabase-js";
+import { getAdminSession } from "./admin-auth";
 
-export function isAdmin(user: User | null): boolean {
-  if (!user) return false;
-  if (user.app_metadata?.role === "admin") return true;
-  const adminEmail = process.env.ADMIN_EMAIL ?? "";
-  return !!adminEmail && user.email === adminEmail;
+export async function isAdmin(): Promise<boolean> {
+  const session = await getAdminSession();
+  return session !== null;
 }
 
-export function canEdit(user: User | null, postUserId: string | null): boolean {
+export async function canEdit(
+  user: User | null,
+  postUserId: string | null,
+): Promise<boolean> {
+  if (await isAdmin()) return true;
   if (!user) return false;
-  return isAdmin(user) || user.id === postUserId;
+  return user.id === postUserId;
 }

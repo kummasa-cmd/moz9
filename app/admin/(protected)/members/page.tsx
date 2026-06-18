@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { deleteMember } from "./actions";
 
 function statusVariant(status: string) {
@@ -20,7 +20,7 @@ function statusVariant(status: string) {
 }
 
 export default async function AdminMembersPage() {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data: members, error } = await supabase
     .from("members")
     .select("id, name, nickname, email, phone, grade, status, created_at")

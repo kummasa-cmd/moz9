@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default async function CommunityPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const admin = isAdmin(user);
+  const admin = await isAdmin();
 
   const { data: boards } = await supabase
     .from("boards")
