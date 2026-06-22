@@ -3,7 +3,9 @@ import Link from "next/link";
 import { MessageSquare, Clock, Lock, ChevronRight, Pencil } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/community-auth";
+import FaqSection from "@/components/FaqSection";
 
 export const metadata: Metadata = {
   title: "커뮤니티 | 모즈나인",
@@ -14,8 +16,9 @@ export default async function CommunityPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const admin = await isAdmin();
+  const db = createAdminClient();
 
-  const { data: boards } = await supabase
+  const { data: boards } = await db
     .from("boards")
     .select("id, name, slug, type, allow_user_write")
     .eq("is_visible", true)
@@ -29,6 +32,8 @@ export default async function CommunityPage() {
           <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">커뮤니티</h1>
         </div>
         <p className="text-muted-foreground text-center py-20">운영 중인 게시판이 없습니다.</p>
+
+        <FaqSection />
       </div>
     );
   }
@@ -37,7 +42,7 @@ export default async function CommunityPage() {
     boards.map(async (board) => {
       const isPrivate = board.type === "개인";
 
-      let query = supabase
+      let query = db
         .from("board_posts")
         .select("id, title, created_at, is_notice, user_id")
         .eq("board_id", board.id)
@@ -48,11 +53,9 @@ export default async function CommunityPage() {
 
       if (isPrivate && !admin) {
         if (user) {
-          // Logged-in non-admin: own posts + notice posts
-          query = query.or(`user_id.eq.${user.id},is_notice.eq.true`);
+          query = query.eq("user_id", user.id);
         } else {
-          // Not logged in: notice posts only
-          query = query.eq("is_notice", true);
+          query = query.eq("user_id", "00000000-0000-0000-0000-000000000000");
         }
       }
 
@@ -134,16 +137,17 @@ export default async function CommunityPage() {
               <div className="px-5 py-8 text-center text-sm text-muted-foreground">
                 {board.type === "개인" && !user ? (
                   <>
-                    공지글이 없습니다.{" "}
                     <Link href="/login" className="text-primary hover:underline">로그인</Link>
-                    하면 더 볼 수 있습니다.
+                    {" "}후 이용할 수 있습니다.
                   </>
-                ) : "등록된 게시물이 없습니다."}
+                ) : board.type === "개인" ? "작성한 글이 없습니다." : "등록된 게시물이 없습니다."}
               </div>
             )}
           </div>
         ))}
       </div>
+
+      <FaqSection />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Pencil, Trash2, Lock, ChevronLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/community-auth";
 import { deletePost } from "./actions";
 
@@ -15,8 +16,9 @@ export default async function CommunityBoardPage({ params }: Props) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const admin = await isAdmin();
+  const db = createAdminClient();
 
-  const { data: board } = await supabase
+  const { data: board } = await db
     .from("boards")
     .select("id, name, slug, type, allow_user_write, use_category")
     .eq("slug", slug)
@@ -27,7 +29,7 @@ export default async function CommunityBoardPage({ params }: Props) {
 
   const isPrivate = board.type === "개인";
 
-  let query = supabase
+  let query = db
     .from("board_posts")
     .select("id, title, author, created_at, is_notice, view_count, status, user_id")
     .eq("board_id", board.id)
@@ -37,11 +39,9 @@ export default async function CommunityBoardPage({ params }: Props) {
 
   if (isPrivate && !admin) {
     if (user) {
-      // Logged-in non-admin: own posts + notice posts
-      query = query.or(`user_id.eq.${user.id},is_notice.eq.true`);
+      query = query.eq("user_id", user.id);
     } else {
-      // Not logged in: notice posts only
-      query = query.eq("is_notice", true);
+      query = query.eq("user_id", "00000000-0000-0000-0000-000000000000");
     }
   }
 
@@ -74,15 +74,14 @@ export default async function CommunityBoardPage({ params }: Props) {
           )}
         </div>
         {isPrivate && !admin && user && (
-          <p className="text-xs text-muted-foreground mt-1">공지 및 내가 작성한 글만 표시됩니다.</p>
+          <p className="text-xs text-muted-foreground mt-1">내가 작성한 글만 표시됩니다.</p>
         )}
         {isPrivate && !user && (
           <p className="text-xs text-muted-foreground mt-1">
-            공지글만 표시됩니다.{" "}
             <Link href={`/login?next=/community/${slug}`} className="text-primary hover:underline">
               로그인
             </Link>
-            하면 더 많은 글을 볼 수 있습니다.
+            {" "}후 이용할 수 있습니다.
           </p>
         )}
       </div>
@@ -92,7 +91,7 @@ export default async function CommunityBoardPage({ params }: Props) {
         {posts && posts.length > 0 ? (
           <ul className="divide-y divide-border">
             {posts.map((post) => {
-              const editable = admin || (user !== null && user.id === post.user_id);
+              const editable = admin || (board.allow_user_write && user !== null && user.id === post.user_id);
               return (
                 <li
                   key={post.id}

@@ -18,7 +18,7 @@ export default async function AdminSiteAdminEditPage({ params, searchParams }: E
 
   const supabase = createAdminClient();
   const { data: admin } = await supabase
-    .from("admin_profiles")
+    .from("admins")
     .select("id, name, email, role")
     .eq("id", id)
     .maybeSingle();
@@ -50,6 +50,12 @@ export default async function AdminSiteAdminEditPage({ params, searchParams }: E
               <option value="최고관리자">최고관리자</option>
             </FormSelect>
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="password">비밀번호 변경</Label>
+          <Input id="password" name="password" type="password" minLength={6} placeholder="변경 시에만 입력" />
+          <p className="text-xs text-muted-foreground">비워두면 기존 비밀번호가 유지됩니다.</p>
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

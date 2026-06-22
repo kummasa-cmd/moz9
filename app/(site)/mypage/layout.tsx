@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import MypageSidebar from "@/components/mypage/MypageSidebar";
 
 export default async function MypageLayout({ children }: { children: React.ReactNode }) {
@@ -8,7 +9,8 @@ export default async function MypageLayout({ children }: { children: React.React
 
   if (!user) redirect("/login?next=/mypage");
 
-  const { data: member } = await supabase
+  const admin = createAdminClient();
+  const { data: member } = await admin
     .from("members")
     .select("nickname, email")
     .eq("user_id", user.id)

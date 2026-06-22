@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function updateProfile(formData: FormData) {
   const nickname = String(formData.get("nickname") ?? "").trim();
@@ -12,7 +13,8 @@ export async function updateProfile(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/mypage/profile");
 
-  const { error } = await supabase
+  const admin = createAdminClient();
+  const { error } = await admin
     .from("members")
     .update({ nickname, updated_at: new Date().toISOString() })
     .eq("user_id", user.id);
@@ -21,7 +23,6 @@ export async function updateProfile(formData: FormData) {
     redirect(`/mypage/profile?error=${encodeURIComponent(error.message)}`);
   }
 
-  // Sync nickname to user metadata
   await supabase.auth.updateUser({ data: { nickname } });
 
   revalidatePath("/mypage", "layout");

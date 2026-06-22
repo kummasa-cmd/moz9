@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/community-auth";
 import { deletePost } from "../actions";
 import { addComment, deleteComment } from "./actions";
@@ -30,10 +31,11 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const admin = await isAdmin();
+  const db = createAdminClient();
 
-  const { data: board } = await supabase
+  const { data: board } = await db
     .from("boards")
-    .select("id, name, slug, type, use_comment")
+    .select("id, name, slug, type, use_comment, allow_user_write")
     .eq("slug", slug)
     .eq("is_visible", true)
     .maybeSingle();
@@ -42,7 +44,7 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
 
   const isPrivate = board.type === "개인";
 
-  const { data: post } = await supabase
+  const { data: post } = await db
     .from("board_posts")
     .select("id, title, content, author, created_at, published_at, view_count, is_notice, user_id")
     .eq("id", postId)
@@ -52,22 +54,19 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
 
   if (!post) notFound();
 
-  // Private board access rules:
-  // - Notice posts: always visible (even without login)
-  // - Non-notice posts: login required; only author or admin
-  if (isPrivate && !post.is_notice) {
+  if (isPrivate && !admin) {
     if (!user) redirect(`/login?next=/community/${slug}/${postId}`);
-    if (!admin && post.user_id !== user.id) redirect(`/community/${slug}`);
+    if (post.user_id !== user.id) redirect(`/community/${slug}`);
   }
 
   // Increment view count
-  await supabase
+  await db
     .from("board_posts")
     .update({ view_count: (post.view_count ?? 0) + 1 })
     .eq("id", postId);
 
   const { data: rawComments } = board.use_comment
-    ? await supabase
+    ? await db
         .from("board_comments")
         .select("id, parent_id, author_name, content, created_at, user_id")
         .eq("post_id", postId)
@@ -85,7 +84,7 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
     }
   }
 
-  const editable = admin || (user !== null && user.id === post.user_id);
+  const editable = admin || (board.allow_user_write && user !== null && user.id === post.user_id);
   const displayDate = new Date(post.published_at ?? post.created_at).toLocaleDateString("ko-KR", {
     year: "numeric", month: "long", day: "numeric",
   });

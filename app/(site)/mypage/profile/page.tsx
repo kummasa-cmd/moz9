@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updateProfile, updatePassword } from "./actions";
@@ -12,7 +13,8 @@ export default async function ProfilePage({ searchParams }: Props) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: member } = await supabase
+  const admin = createAdminClient();
+  const { data: member } = await admin
     .from("members")
     .select("nickname, email, created_at")
     .eq("user_id", user!.id)

@@ -37,11 +37,17 @@ export async function updateAdmin(id: string, formData: FormData) {
 
   const name = String(formData.get("name") ?? "");
   const role = String(formData.get("role") ?? "운영자");
+  const password = String(formData.get("password") ?? "").trim();
+
+  const updateData: Record<string, string> = { name, role };
+  if (password) {
+    updateData.password_hash = await hashPassword(password);
+  }
 
   const supabase = createAdminClient();
   const { error } = await supabase
     .from("admins")
-    .update({ name, role })
+    .update(updateData)
     .eq("id", id);
 
   if (error) {

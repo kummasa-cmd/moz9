@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function createConsultation(formData: FormData) {
   const subject = String(formData.get("subject") ?? "").trim();
@@ -16,7 +17,8 @@ export async function createConsultation(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/mypage/consultations/new");
 
-  const { error } = await supabase.from("consultations").insert({
+  const admin = createAdminClient();
+  const { error } = await admin.from("consultations").insert({
     member_id: user.id,
     subject,
     message,

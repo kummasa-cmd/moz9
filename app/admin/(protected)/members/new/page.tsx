@@ -39,6 +39,13 @@ export default async function AdminMemberNewPage({ searchParams }: NewMemberPage
           <Input id="email" name="email" type="email" required placeholder="hello@example.com" />
         </div>
 
+        <div className="space-y-2">
+          <Label htmlFor="password">
+            비밀번호 <span className="text-destructive">*</span>
+          </Label>
+          <Input id="password" name="password" type="password" required minLength={6} placeholder="6자 이상 입력" />
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           <div className="space-y-2">
             <Label htmlFor="phone">연락처</Label>

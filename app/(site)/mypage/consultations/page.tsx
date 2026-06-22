@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const statusVariant = (s: string) =>
   s === "완료" ? ("default" as const) : s === "처리중" ? ("secondary" as const) : ("outline" as const);
@@ -10,7 +11,8 @@ export default async function ConsultationsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: consultations } = await supabase
+  const admin = createAdminClient();
+  const { data: consultations } = await admin
     .from("consultations")
     .select("id, subject, status, admin_reply, created_at")
     .eq("member_id", user!.id)

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/community-auth";
 
 export async function addComment(slug: string, postId: string, formData: FormData) {
@@ -14,9 +15,9 @@ export async function addComment(slug: string, postId: string, formData: FormDat
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  const db = createAdminClient();
 
-  // Check if board is private — require login
-  const { data: board } = await supabase
+  const { data: board } = await db
     .from("boards")
     .select("type, use_comment")
     .eq("slug", slug)
@@ -27,11 +28,11 @@ export async function addComment(slug: string, postId: string, formData: FormDat
 
   let resolvedAuthor = author_name;
   if (user) {
-    const { data: memberData } = await supabase.from("members").select("nickname").eq("user_id", user.id).maybeSingle();
+    const { data: memberData } = await db.from("members").select("nickname").eq("user_id", user.id).maybeSingle();
     resolvedAuthor = memberData?.nickname ?? user.user_metadata?.name ?? user.email ?? author_name;
   }
 
-  await supabase.from("board_comments").insert({
+  await db.from("board_comments").insert({
     post_id: postId,
     parent_id,
     author_name: resolvedAuthor,
@@ -51,7 +52,9 @@ export async function deleteComment(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
 
-  const { data: comment } = await supabase
+  const db = createAdminClient();
+
+  const { data: comment } = await db
     .from("board_comments")
     .select("user_id")
     .eq("id", commentId)
@@ -60,7 +63,7 @@ export async function deleteComment(formData: FormData) {
   const admin = await isAdmin();
   if (!admin && comment?.user_id !== user.id) return;
 
-  await supabase.from("board_comments").delete().eq("id", commentId);
+  await db.from("board_comments").delete().eq("id", commentId);
 
   revalidatePath(`/community/${slug}/${postId}`);
 }

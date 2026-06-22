@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { MessageCircle, ShoppingBag, CreditCard, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
@@ -6,9 +7,10 @@ export default async function MypageDashboard() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  const admin = createAdminClient();
   const [{ data: member }, { count: consultationCount }] = await Promise.all([
-    supabase.from("members").select("nickname, created_at").eq("user_id", user!.id).maybeSingle(),
-    supabase.from("consultations").select("*", { count: "exact", head: true }).eq("member_id", user!.id),
+    admin.from("members").select("nickname, created_at").eq("user_id", user!.id).maybeSingle(),
+    admin.from("consultations").select("*", { count: "exact", head: true }).eq("member_id", user!.id),
   ]);
 
   const joinDate = member?.created_at

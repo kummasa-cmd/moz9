@@ -1,4 +1,5 @@
-import { Save, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Pencil, Save, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormSelect } from "@/components/admin/FormSelect";
@@ -107,18 +108,27 @@ export default async function AdminSiteAdminsPage({ searchParams }: AdminsPagePr
                   {new Date(a.created_at).toLocaleDateString("ko-KR")}
                 </TableCell>
                 <TableCell className="text-right">
-                  {sessionAdminId !== a.id && (
-                    <form action={deleteAdmin}>
-                      <input type="hidden" name="id" value={a.id} />
-                      <button
-                        type="submit"
-                        className="text-muted-foreground hover:text-destructive transition-colors"
-                        aria-label="삭제"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </form>
-                  )}
+                  <div className="inline-flex items-center gap-3">
+                    <Link
+                      href={`/admin/site/admins/${a.id}/edit`}
+                      className="text-muted-foreground hover:text-primary transition-colors"
+                      aria-label="수정"
+                    >
+                      <Pencil size={15} />
+                    </Link>
+                    {sessionAdminId !== a.id && (
+                      <form action={deleteAdmin}>
+                        <input type="hidden" name="id" value={a.id} />
+                        <button
+                          type="submit"
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                          aria-label="삭제"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </form>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

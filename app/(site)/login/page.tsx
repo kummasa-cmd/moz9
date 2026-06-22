@@ -23,7 +23,7 @@ export default async function LoginPage({ searchParams }: Props) {
 
         <form action={login} className="space-y-4 rounded-xl border border-border bg-white p-6">
 
-          <input type="hidden" name="next" value={next ?? "/community"} />
+          <input type="hidden" name="next" value={next ?? "/mypage"} />
 
           <div className="space-y-2">
             <Label htmlFor="email">이메일</Label>

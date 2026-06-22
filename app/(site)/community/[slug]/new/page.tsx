@@ -3,8 +3,9 @@ import { ChevronLeft, Send } from "lucide-react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import RichEditor from "@/components/RichEditor";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createPost } from "../actions";
 
 type Props = {
@@ -20,14 +21,26 @@ export default async function CommunityNewPostPage({ params, searchParams }: Pro
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect(`/login?next=/community/${slug}/new`);
 
-  const { data: board } = await supabase
+  const db = createAdminClient();
+
+  const { data: board } = await db
     .from("boards")
-    .select("id, name, allow_user_write, type")
+    .select("id, name, allow_user_write, type, use_category")
     .eq("slug", slug)
     .eq("is_visible", true)
     .maybeSingle();
 
   if (!board || !board.allow_user_write) notFound();
+
+  let categories: { id: string; name: string }[] = [];
+  if (board.use_category) {
+    const { data } = await db
+      .from("board_categories")
+      .select("id, name")
+      .eq("board_id", board.id)
+      .order("sort_order");
+    categories = data ?? [];
+  }
 
   const action = createPost.bind(null, slug);
 
@@ -44,6 +57,25 @@ export default async function CommunityNewPostPage({ params, searchParams }: Pro
       <h1 className="text-xl font-bold text-foreground mb-6">글쓰기</h1>
 
       <form action={action} className="rounded-xl border border-border bg-white p-6 space-y-5">
+        {categories.length > 0 && (
+          <div className="space-y-2">
+            <Label htmlFor="category_id">
+              카테고리 <span className="text-destructive">*</span>
+            </Label>
+            <select
+              id="category_id"
+              name="category_id"
+              required
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <option value="">카테고리를 선택하세요</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="space-y-2">
           <Label htmlFor="title">
             제목 <span className="text-destructive">*</span>
@@ -52,17 +84,13 @@ export default async function CommunityNewPostPage({ params, searchParams }: Pro
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="content">
+          <Label>
             내용 <span className="text-destructive">*</span>
+            <span className="ml-2 text-xs text-muted-foreground font-normal">
+              이미지는 붙여넣기 또는 툴바 아이콘으로 삽입 (최대 5MB)
+            </span>
           </Label>
-          <Textarea
-            id="content"
-            name="content"
-            rows={12}
-            required
-            placeholder="내용을 입력하세요"
-            className="resize-y"
-          />
+          <RichEditor name="content" />
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

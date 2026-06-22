@@ -55,6 +55,11 @@ export default async function AdminMemberEditPage({ params, searchParams }: Edit
           <Input id="email" name="email" type="email" required defaultValue={member.email} />
         </div>
 
+        <div className="space-y-2">
+          <Label htmlFor="password">비밀번호 변경</Label>
+          <Input id="password" name="password" type="password" minLength={6} placeholder="변경 시에만 입력 (6자 이상)" />
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           <div className="space-y-2">
             <Label htmlFor="phone">연락처</Label>

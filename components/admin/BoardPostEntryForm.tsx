@@ -2,7 +2,7 @@ import { Save } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormSelect } from "@/components/admin/FormSelect";
-import RichEditor from "@/components/admin/RichEditor";
+import RichEditor from "@/components/RichEditor";
 
 type Category = { id: string; name: string };
 
