@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ArrowRight, BookOpen } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -93,6 +94,60 @@ export default function AboutPage() {
           기술과 글쓰기 모두를 아는 사람이 만들어야 진짜 작가를 위한 디지털 공간이 탄생한다고
           믿습니다. 모즈나인은 그 믿음으로 만들어졌습니다.
         </p>
+      </div>
+
+      {/* Company intro */}
+      <div className="mb-16">
+        <h2 className="text-xl font-bold text-foreground mb-6">사업 소개</h2>
+        <div className="max-w-3xl space-y-4 text-muted-foreground leading-relaxed text-base">
+          <p>
+            MOZNINE은 디지털 기술을 통해 기업의 가능성을 현실로 만드는 IT 개발 전문 기업입니다.
+          </p>
+          <p>
+            홈페이지와 웹 서비스, 모바일 애플리케이션의 개발부터 유지보수, 운영까지 하나의
+            서비스가 지속적으로 성장할 수 있도록 전 과정을 함께합니다.
+          </p>
+          <p>
+            우리는 단순히 프로그램을 만드는 것이 아니라, 고객의 비즈니스에 가장 적합한 디지털
+            환경을 설계하고 안정적으로 운영하는 것을 목표로 합니다.
+          </p>
+          <p>
+            MOZNINE은 작은 아이디어도 더 큰 가치로 연결될 수 있다는 믿음 아래, 신뢰할 수 있는
+            기술과 꾸준한 파트너십으로 고객과 함께 성장합니다.
+          </p>
+        </div>
+      </div>
+
+      {/* Logo story */}
+      <div className="mb-16">
+        <h2 className="text-xl font-bold text-foreground mb-6">로고에 담긴 의미</h2>
+        <div className="rounded-xl border border-border bg-white p-8 sm:p-10">
+          <Image
+            src="/logo/moznine-logo-full.svg"
+            alt="모즈나인 로고"
+            width={240}
+            height={120}
+            className="h-14 w-auto mb-8"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div>
+              <p className="text-sm font-bold text-primary tracking-widest mb-2">MOZ</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                More than Zero
+                <br />
+                0에서 시작해 더 큰 가치를 만드는
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-accent tracking-widest mb-2">NINE</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                완성과 성장의 숫자
+                <br />
+                최고의 수준을 의미
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Career timeline */}
