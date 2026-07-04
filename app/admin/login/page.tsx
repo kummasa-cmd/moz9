@@ -24,7 +24,7 @@ export default async function AdminLoginPage({ searchParams }: LoginPageProps) {
             alt="moznine"
             width={160}
             height={80}
-            className="h-10 w-auto mx-auto"
+            className="h-[52px] w-auto mx-auto"
           />
           <p className="text-white/50 text-sm mt-1">admin</p>
         </div>

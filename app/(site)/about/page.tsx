@@ -127,7 +127,7 @@ export default function AboutPage() {
             alt="모즈나인 로고"
             width={240}
             height={120}
-            className="h-14 w-auto mb-8"
+            className="h-[73px] w-auto mb-8"
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>

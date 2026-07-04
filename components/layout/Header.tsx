@@ -40,7 +40,7 @@ export default function Header({ user }: HeaderProps) {
             width={160}
             height={80}
             priority
-            className="h-9 w-auto sm:h-10"
+            className="h-[47px] w-auto sm:h-[52px]"
           />
         </Link>
 

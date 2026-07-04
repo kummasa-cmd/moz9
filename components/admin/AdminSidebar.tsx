@@ -27,7 +27,7 @@ export default function AdminSidebar({ onNavigate }: { onNavigate?: () => void }
           alt="moznine"
           width={160}
           height={80}
-          className="h-7 w-auto"
+          className="h-[36px] w-auto"
         />
         <span className="text-white/50 font-normal text-sm">admin</span>
       </Link>

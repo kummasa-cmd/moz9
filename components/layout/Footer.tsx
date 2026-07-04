@@ -19,7 +19,7 @@ export default function Footer() {
               alt="moznine"
               width={160}
               height={80}
-              className="h-8 w-auto mb-1"
+              className="h-[42px] w-auto mb-1"
             />
             <p className="text-sm text-muted-foreground">
               작가·1인 크리에이터를 위한 디지털 운영 파트너
