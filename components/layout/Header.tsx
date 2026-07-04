@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -32,8 +33,15 @@ export default function Header({ user }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-border">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <Link href="/" className="font-bold text-xl text-primary tracking-tight">
-          moz9
+        <Link href="/" className="flex items-center" aria-label="모즈나인 홈으로 이동">
+          <Image
+            src="/logo/moznine-logo-full.svg"
+            alt="moznine"
+            width={160}
+            height={80}
+            priority
+            className="h-9 w-auto sm:h-10"
+          />
         </Link>
 
         {/* Desktop nav */}

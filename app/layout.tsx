@@ -26,6 +26,9 @@ export const metadata: Metadata = {
     locale: "ko_KR",
     type: "website",
   },
+  icons: {
+    icon: [{ url: "/logo/favicon.svg", type: "image/svg+xml" }],
+  },
 };
 
 export default function RootLayout({

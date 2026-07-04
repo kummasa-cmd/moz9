@@ -1,0 +1,38 @@
+<!--
+  Moznine Favicon (SVG)
+  Usage: /public/favicon.svg + <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  Rounded-square gradient background with white symbol for maximum readability at 16x16.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="moznine">
+  <defs>
+    <linearGradient id="favGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B5BFF"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="0" y="0" width="64" height="64" rx="14" ry="14" fill="url(#favGrad)"/>
+
+  <!-- White symbol, thicker stroke for small-size readability -->
+  <g transform="translate(32 28)">
+    <path
+      d="M -17 0
+         C -17 -7, -8 -7, 0 0
+         C 8 7, 17 7, 17 0
+         C 17 -7, 8 -7, 0 0
+         C -8 7, -17 7, -17 0 Z"
+      fill="none"
+      stroke="#FFFFFF"
+      stroke-width="3.2"
+      stroke-linecap="round"
+      stroke-linejoin="round"/>
+    <path
+      d="M 17 0
+         C 19 5, 17 11, 13 13"
+      fill="none"
+      stroke="#FFFFFF"
+      stroke-width="3.2"
+      stroke-linecap="round"/>
+  </g>
+</svg>

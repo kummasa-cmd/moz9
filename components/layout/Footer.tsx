@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 const socialLinks = [
@@ -13,7 +14,13 @@ export default function Footer() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="flex flex-col md:flex-row justify-between gap-6">
           <div className="space-y-1">
-            <p className="font-bold text-lg text-primary">moz9</p>
+            <Image
+              src="/logo/moznine-logo-full.svg"
+              alt="moznine"
+              width={160}
+              height={80}
+              className="h-8 w-auto mb-1"
+            />
             <p className="text-sm text-muted-foreground">
               작가·1인 크리에이터를 위한 디지털 운영 파트너
             </p>

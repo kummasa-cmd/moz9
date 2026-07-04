@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
@@ -20,12 +21,15 @@ export default function AdminSidebar({ onNavigate }: { onNavigate?: () => void }
 
   return (
     <nav className="flex flex-col py-6">
-      <Link
-        href="/admin"
-        onClick={onNavigate}
-        className="px-6 mb-6 font-bold text-lg text-white tracking-tight"
-      >
-        moz9 <span className="text-white/50 font-normal text-sm">admin</span>
+      <Link href="/admin" onClick={onNavigate} className="flex items-center gap-2 px-6 mb-6">
+        <Image
+          src="/logo/moznine-logo-dark.svg"
+          alt="moznine"
+          width={160}
+          height={80}
+          className="h-7 w-auto"
+        />
+        <span className="text-white/50 font-normal text-sm">admin</span>
       </Link>
 
       <div className="flex flex-col gap-1 px-3">

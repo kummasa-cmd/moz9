@@ -1,0 +1,43 @@
+<!--
+  Moznine Logo — Full (Symbol + Wordmark), Dark Version
+  Usage: Dark-mode header, footer, dark backgrounds
+  Size: 400 x 200
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width="400" height="200" role="img" aria-label="moznine">
+  <defs>
+    <linearGradient id="mozGradDark" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#5B7FFF"/>
+      <stop offset="100%" stop-color="#A78BFA"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(200 70)">
+    <path
+      d="M -55 0
+         C -55 -22, -25 -22, 0 0
+         C 25 22, 55 22, 55 0
+         C 55 -22, 25 -22, 0 0
+         C -25 22, -55 22, -55 0 Z"
+      fill="none"
+      stroke="url(#mozGradDark)"
+      stroke-width="7"
+      stroke-linecap="round"
+      stroke-linejoin="round"/>
+    <path
+      d="M 55 0
+         C 60 15, 55 32, 42 40"
+      fill="none"
+      stroke="url(#mozGradDark)"
+      stroke-width="7"
+      stroke-linecap="round"/>
+  </g>
+
+  <text
+    x="200" y="160"
+    text-anchor="middle"
+    font-family="'Playfair Display', 'Cormorant Garamond', 'Times New Roman', serif"
+    font-weight="500"
+    font-size="38"
+    letter-spacing="4"
+    fill="#F5F5FA">moznine</text>
+</svg>

@@ -1,0 +1,47 @@
+<!--
+  Moznine Logo — Full (Symbol + Wordmark), Light Version
+  Usage: Header, landing hero, about page
+  Size: 400 x 200 (scalable via width/height or CSS)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width="400" height="200" role="img" aria-label="moznine">
+  <defs>
+    <linearGradient id="mozGrad" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#3B5BFF"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Symbol: infinity ∞ flowing into the tail of 9 -->
+  <g transform="translate(200 70)">
+    <!-- Left loop of infinity -->
+    <path
+      d="M -55 0
+         C -55 -22, -25 -22, 0 0
+         C 25 22, 55 22, 55 0
+         C 55 -22, 25 -22, 0 0
+         C -25 22, -55 22, -55 0 Z"
+      fill="none"
+      stroke="url(#mozGrad)"
+      stroke-width="7"
+      stroke-linecap="round"
+      stroke-linejoin="round"/>
+    <!-- Tail of 9, extending down from the right loop -->
+    <path
+      d="M 55 0
+         C 60 15, 55 32, 42 40"
+      fill="none"
+      stroke="url(#mozGrad)"
+      stroke-width="7"
+      stroke-linecap="round"/>
+  </g>
+
+  <!-- Wordmark: moznine (modern serif, lowercase) -->
+  <text
+    x="200" y="160"
+    text-anchor="middle"
+    font-family="'Playfair Display', 'Cormorant Garamond', 'Times New Roman', serif"
+    font-weight="500"
+    font-size="38"
+    letter-spacing="4"
+    fill="#1A1A2E">moznine</text>
+</svg>

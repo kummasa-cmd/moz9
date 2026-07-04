@@ -33,23 +33,23 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #111827;
+  --foreground: #1a1a2e;
   --card: #ffffff;
-  --card-foreground: #111827;
+  --card-foreground: #1a1a2e;
   --popover: #ffffff;
-  --popover-foreground: #111827;
-  --primary: #1e40af;
+  --popover-foreground: #1a1a2e;
+  --primary: #3b5bff;
   --primary-foreground: #ffffff;
   --secondary: #f3f4f6;
-  --secondary-foreground: #111827;
+  --secondary-foreground: #1a1a2e;
   --muted: #f9fafb;
   --muted-foreground: #6b7280;
-  --accent: #f59e0b;
-  --accent-foreground: #111827;
+  --accent: #8b5cf6;
+  --accent-foreground: #ffffff;
   --destructive: oklch(0.577 0.245 27.325);
   --border: #e5e7eb;
   --input: #e5e7eb;
-  --ring: #1e40af;
+  --ring: #3b5bff;
   --radius: 0.5rem;
 }
 

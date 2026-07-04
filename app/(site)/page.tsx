@@ -26,7 +26,7 @@ export default async function HomePage() {
     <>
       {/* Hero */}
       <section className="relative overflow-hidden bg-white py-16 sm:py-24 lg:py-32">
-        <div className="absolute inset-0 -z-10 bg-gradient-to-br from-blue-50 via-white to-amber-50" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-br from-blue-50 via-white to-violet-50" />
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
             {/* Text */}

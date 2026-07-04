@@ -83,7 +83,7 @@ export default async function WorksPage({ searchParams }: Props) {
               className="rounded-xl border border-border bg-white overflow-hidden hover:shadow-md transition-shadow group"
             >
               {/* Thumbnail */}
-              <div className="h-48 overflow-hidden bg-gradient-to-br from-blue-100 via-blue-50 to-amber-50">
+              <div className="h-48 overflow-hidden bg-gradient-to-br from-blue-100 via-blue-50 to-violet-50">
                 {work.imageUrl ? (
                   <img
                     src={work.imageUrl}

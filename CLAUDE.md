@@ -45,11 +45,11 @@ npm run lint      # Run ESLint
 
 ## Design Tokens
 
-**Colors:**
-- Primary: `#1E40AF` (deep blue)
-- Accent: `#F59E0B` (warm orange)
+**Colors** (matched to the moznine logo/watermark gradient — see `public/logo/README.md`):
+- Primary: `#3B5BFF` (moz-blue)
+- Accent: `#8B5CF6` (moz-purple)
 - Background: `#FFFFFF`
-- Text: `#111827`
+- Text: `#1A1A2E` (moz-ink)
 - Muted text: `#6B7280`
 
 **Fonts:**

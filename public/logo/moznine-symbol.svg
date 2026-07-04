@@ -1,0 +1,34 @@
+<!--
+  Moznine Symbol Only (∞ + 9)
+  Usage: Standalone mark, watermarks, decorative element
+  Size: 200 x 120 (square-ish, scalable)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" width="200" height="120" role="img" aria-label="moznine symbol">
+  <defs>
+    <linearGradient id="mozSymGrad" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#3B5BFF"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(100 50)">
+    <path
+      d="M -55 0
+         C -55 -22, -25 -22, 0 0
+         C 25 22, 55 22, 55 0
+         C 55 -22, 25 -22, 0 0
+         C -25 22, -55 22, -55 0 Z"
+      fill="none"
+      stroke="url(#mozSymGrad)"
+      stroke-width="8"
+      stroke-linecap="round"
+      stroke-linejoin="round"/>
+    <path
+      d="M 55 0
+         C 60 15, 55 32, 42 40"
+      fill="none"
+      stroke="url(#mozSymGrad)"
+      stroke-width="8"
+      stroke-linecap="round"/>
+  </g>
+</svg>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { LogIn } from "lucide-react";
 import { login } from "./actions";
 
@@ -18,9 +19,14 @@ export default async function AdminLoginPage({ searchParams }: LoginPageProps) {
     <div className="min-h-screen flex items-center justify-center bg-[#0F172A] px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <p className="font-bold text-2xl text-white tracking-tight">
-            moz9 <span className="text-white/50 font-normal text-base">admin</span>
-          </p>
+          <Image
+            src="/logo/moznine-logo-dark.svg"
+            alt="moznine"
+            width={160}
+            height={80}
+            className="h-10 w-auto mx-auto"
+          />
+          <p className="text-white/50 text-sm mt-1">admin</p>
         </div>
 
         <form action={login} className="rounded-xl bg-white p-6 space-y-5">
