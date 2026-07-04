@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
 import { randomUUID } from "crypto";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const MAX_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const BUCKET = "portfolio-images";
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
@@ -22,10 +22,19 @@ export async function POST(request: NextRequest) {
 
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
   const filename = `${randomUUID()}.${ext}`;
-  const uploadDir = join(process.cwd(), "public", "portfolio_file");
 
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(join(uploadDir, filename), Buffer.from(await file.arrayBuffer()));
+  const supabase = createAdminClient();
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(filename, Buffer.from(await file.arrayBuffer()), {
+      contentType: file.type,
+    });
 
-  return NextResponse.json({ url: `/portfolio_file/${filename}` });
+  if (error) {
+    return NextResponse.json({ error: "이미지 업로드에 실패했습니다." }, { status: 500 });
+  }
+
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(filename);
+
+  return NextResponse.json({ url: data.publicUrl });
 }
