@@ -95,8 +95,12 @@ export default function BoardForm({
           <FormSelect id="type" name="type" defaultValue={defaultValues.type ?? "일반"}>
             <option value="일반">일반 — 전체 게시물 공개</option>
             <option value="개인">개인 — 본인 게시물만 표시</option>
+            <option value="관리자">관리자 — 관리페이지 전용, 사용자 페이지 비공개</option>
           </FormSelect>
-          <p className="text-xs text-muted-foreground">관리자는 모든 게시물을 볼 수 있습니다.</p>
+          <p className="text-xs text-muted-foreground">
+            관리자는 모든 게시물을 볼 수 있습니다. &apos;관리자&apos; 유형은 노출·사용자입력 설정과
+            무관하게 항상 비공개 처리되며, 게시물 등록·수정·삭제는 관리페이지에서만 가능합니다.
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="sort_order">정렬 순서</Label>

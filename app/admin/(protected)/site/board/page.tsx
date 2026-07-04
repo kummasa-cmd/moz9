@@ -68,7 +68,13 @@ export default async function AdminSiteBoardPage() {
                     </code>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={b.type === "일반" ? "default" : "secondary"}>{b.type}</Badge>
+                    <Badge
+                      variant={
+                        b.type === "일반" ? "default" : b.type === "관리자" ? "outline" : "secondary"
+                      }
+                    >
+                      {b.type}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-center">
                     <Link

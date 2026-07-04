@@ -9,8 +9,9 @@ export async function createBoard(formData: FormData) {
   const slug = String(formData.get("slug") ?? "").trim();
   const type = String(formData.get("type") ?? "일반");
   const sort_order = parseInt(String(formData.get("sort_order") ?? "0"), 10) || 0;
-  const is_visible = formData.get("is_visible") === "on";
-  const allow_user_write = formData.get("allow_user_write") === "on";
+  const isAdminBoard = type === "관리자";
+  const is_visible = !isAdminBoard && formData.get("is_visible") === "on";
+  const allow_user_write = !isAdminBoard && formData.get("allow_user_write") === "on";
   const use_category = formData.get("use_category") === "on";
   const use_comment = formData.get("use_comment") === "on";
 
@@ -45,8 +46,9 @@ export async function updateBoard(id: string, formData: FormData) {
   const slug = String(formData.get("slug") ?? "").trim();
   const type = String(formData.get("type") ?? "일반");
   const sort_order = parseInt(String(formData.get("sort_order") ?? "0"), 10) || 0;
-  const is_visible = formData.get("is_visible") === "on";
-  const allow_user_write = formData.get("allow_user_write") === "on";
+  const isAdminBoard = type === "관리자";
+  const is_visible = !isAdminBoard && formData.get("is_visible") === "on";
+  const allow_user_write = !isAdminBoard && formData.get("allow_user_write") === "on";
   const use_category = formData.get("use_category") === "on";
   const use_comment = formData.get("use_comment") === "on";
 
