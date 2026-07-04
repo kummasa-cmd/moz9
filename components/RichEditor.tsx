@@ -9,7 +9,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import {
   Bold, Italic, List, ListOrdered,
   Heading2, Heading3, ImageIcon,
-  Minus, Quote, Undo, Redo,
+  Minus, Quote, Undo, Redo, Code2,
 } from "lucide-react";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -69,6 +69,7 @@ export default function RichEditor({ name, defaultValue = "" }: RichEditorProps)
   const editorRef = useRef<Editor | null>(null);
   const [html, setHtml] = useState(defaultValue);
   const [selectedImageWidth, setSelectedImageWidth] = useState<string | null>(null);
+  const [sourceMode, setSourceMode] = useState(false);
 
   const uploadAndInsert = useCallback(async (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -146,6 +147,13 @@ export default function RichEditor({ name, defaultValue = "" }: RichEditorProps)
     setSelectedImageWidth(size);
   };
 
+  const toggleSourceMode = () => {
+    if (sourceMode) {
+      editor.commands.setContent(html);
+    }
+    setSourceMode((v) => !v);
+  };
+
   return (
     <div className="rounded-lg border border-input overflow-hidden">
       <input type="hidden" name={name} value={html} />
@@ -163,102 +171,124 @@ export default function RichEditor({ name, defaultValue = "" }: RichEditorProps)
 
       {/* Main toolbar */}
       <div className="flex flex-wrap items-center gap-0.5 border-b border-input bg-muted/40 px-2 py-1.5">
-        <Btn
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          active={editor.isActive("bold")}
-          title="굵게"
-        >
-          <Bold size={14} />
-        </Btn>
-        <Btn
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          active={editor.isActive("italic")}
-          title="기울임"
-        >
-          <Italic size={14} />
-        </Btn>
-        <div className="w-px h-4 bg-border mx-1" />
-        <Btn
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          active={editor.isActive("heading", { level: 2 })}
-          title="제목 2"
-        >
-          <Heading2 size={14} />
-        </Btn>
-        <Btn
-          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-          active={editor.isActive("heading", { level: 3 })}
-          title="제목 3"
-        >
-          <Heading3 size={14} />
-        </Btn>
-        <div className="w-px h-4 bg-border mx-1" />
-        <Btn
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          active={editor.isActive("bulletList")}
-          title="목록"
-        >
-          <List size={14} />
-        </Btn>
-        <Btn
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          active={editor.isActive("orderedList")}
-          title="번호 목록"
-        >
-          <ListOrdered size={14} />
-        </Btn>
-        <Btn
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-          active={editor.isActive("blockquote")}
-          title="인용"
-        >
-          <Quote size={14} />
-        </Btn>
-        <div className="w-px h-4 bg-border mx-1" />
-        <Btn onClick={() => fileInputRef.current?.click()} title="이미지 삽입 (최대 5MB)">
-          <ImageIcon size={14} />
-        </Btn>
-        <Btn
-          onClick={() => editor.chain().focus().setHorizontalRule().run()}
-          title="구분선"
-        >
-          <Minus size={14} />
-        </Btn>
-        <div className="w-px h-4 bg-border mx-1" />
-        <Btn onClick={() => editor.chain().focus().undo().run()} title="실행 취소">
-          <Undo size={14} />
-        </Btn>
-        <Btn onClick={() => editor.chain().focus().redo().run()} title="다시 실행">
-          <Redo size={14} />
-        </Btn>
-
-        {/* Image size picker — visible only when an image is selected */}
-        {selectedImageWidth !== null && (
+        {!sourceMode && (
           <>
+            <Btn
+              onClick={() => editor.chain().focus().toggleBold().run()}
+              active={editor.isActive("bold")}
+              title="굵게"
+            >
+              <Bold size={14} />
+            </Btn>
+            <Btn
+              onClick={() => editor.chain().focus().toggleItalic().run()}
+              active={editor.isActive("italic")}
+              title="기울임"
+            >
+              <Italic size={14} />
+            </Btn>
             <div className="w-px h-4 bg-border mx-1" />
-            <span className="text-xs text-muted-foreground px-1">이미지 크기:</span>
-            {IMAGE_SIZES.map((size) => (
-              <button
-                key={size}
-                type="button"
-                onClick={() => applyImageSize(size)}
-                title={`이미지 너비 ${size}`}
-                className={`px-2 py-0.5 text-xs rounded transition-colors ${
-                  selectedImageWidth === size
-                    ? "bg-primary text-white"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                {size}
-              </button>
-            ))}
+            <Btn
+              onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+              active={editor.isActive("heading", { level: 2 })}
+              title="제목 2"
+            >
+              <Heading2 size={14} />
+            </Btn>
+            <Btn
+              onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+              active={editor.isActive("heading", { level: 3 })}
+              title="제목 3"
+            >
+              <Heading3 size={14} />
+            </Btn>
+            <div className="w-px h-4 bg-border mx-1" />
+            <Btn
+              onClick={() => editor.chain().focus().toggleBulletList().run()}
+              active={editor.isActive("bulletList")}
+              title="목록"
+            >
+              <List size={14} />
+            </Btn>
+            <Btn
+              onClick={() => editor.chain().focus().toggleOrderedList().run()}
+              active={editor.isActive("orderedList")}
+              title="번호 목록"
+            >
+              <ListOrdered size={14} />
+            </Btn>
+            <Btn
+              onClick={() => editor.chain().focus().toggleBlockquote().run()}
+              active={editor.isActive("blockquote")}
+              title="인용"
+            >
+              <Quote size={14} />
+            </Btn>
+            <div className="w-px h-4 bg-border mx-1" />
+            <Btn onClick={() => fileInputRef.current?.click()} title="이미지 삽입 (최대 5MB)">
+              <ImageIcon size={14} />
+            </Btn>
+            <Btn
+              onClick={() => editor.chain().focus().setHorizontalRule().run()}
+              title="구분선"
+            >
+              <Minus size={14} />
+            </Btn>
+            <div className="w-px h-4 bg-border mx-1" />
+            <Btn onClick={() => editor.chain().focus().undo().run()} title="실행 취소">
+              <Undo size={14} />
+            </Btn>
+            <Btn onClick={() => editor.chain().focus().redo().run()} title="다시 실행">
+              <Redo size={14} />
+            </Btn>
+
+            {/* Image size picker — visible only when an image is selected */}
+            {selectedImageWidth !== null && (
+              <>
+                <div className="w-px h-4 bg-border mx-1" />
+                <span className="text-xs text-muted-foreground px-1">이미지 크기:</span>
+                {IMAGE_SIZES.map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => applyImageSize(size)}
+                    title={`이미지 너비 ${size}`}
+                    className={`px-2 py-0.5 text-xs rounded transition-colors ${
+                      selectedImageWidth === size
+                        ? "bg-primary text-white"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </>
+            )}
           </>
         )}
+
+        <div className="w-px h-4 bg-border mx-1" />
+        <Btn
+          onClick={toggleSourceMode}
+          active={sourceMode}
+          title={sourceMode ? "에디터로 보기" : "소스코드 보기"}
+        >
+          <Code2 size={14} />
+        </Btn>
       </div>
 
       {/* Editor area */}
       <div className="rich-editor-content px-4 py-3">
-        <EditorContent editor={editor} />
+        {sourceMode ? (
+          <textarea
+            value={html}
+            onChange={(e) => setHtml(e.target.value)}
+            spellCheck={false}
+            className="w-full min-h-[480px] outline-none resize-y bg-transparent text-foreground font-mono text-xs leading-relaxed"
+          />
+        ) : (
+          <EditorContent editor={editor} />
+        )}
       </div>
     </div>
   );
