@@ -48,7 +48,8 @@ export default async function AdminBoardPostsPage({ params }: Props) {
   }
 
   const categoryMap = new Map((categories ?? []).map((c) => [c.id, c.name]));
-  const colCount = board.use_category ? 7 : 6;
+  const colCount = board.use_category ? 8 : 7;
+  const totalCount = posts?.length ?? 0;
 
   return (
     <div>
@@ -80,6 +81,7 @@ export default async function AdminBoardPostsPage({ params }: Props) {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12 text-center">번호</TableHead>
               {board.use_category && <TableHead className="w-28">카테고리</TableHead>}
               <TableHead>제목</TableHead>
               <TableHead className="w-24">작성자</TableHead>
@@ -90,11 +92,14 @@ export default async function AdminBoardPostsPage({ params }: Props) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(posts ?? []).map((p) => (
+            {(posts ?? []).map((p, i) => (
               <TableRow
                 key={p.id}
                 className={p.is_notice ? "bg-primary/5" : undefined}
               >
+                <TableCell className="text-center text-muted-foreground tabular-nums">
+                  {totalCount - i}
+                </TableCell>
                 {board.use_category && (
                   <TableCell className="text-muted-foreground text-sm">
                     {p.category_id && categoryMap.has(p.category_id)
