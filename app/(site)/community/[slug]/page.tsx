@@ -1,18 +1,30 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Pencil, Trash2, Lock, ChevronLeft } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Pencil, Lock, ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/community-auth";
-import { deletePost } from "./actions";
+import { deletePost, deletePosts } from "./actions";
+import PostsList from "./PostsList";
+import { PAGE_SIZE_OPTIONS, type CommunityPostRow } from "./types";
+
+const DEFAULT_PAGE_SIZE = 10;
 
 type Props = {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ page?: string; limit?: string }>;
 };
 
-export default async function CommunityBoardPage({ params }: Props) {
+export default async function CommunityBoardPage({ params, searchParams }: Props) {
   const { slug } = await params;
+  const sp = await searchParams;
+
+  const limit = PAGE_SIZE_OPTIONS.includes(Number(sp.limit))
+    ? Number(sp.limit)
+    : DEFAULT_PAGE_SIZE;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const offset = (page - 1) * limit;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const admin = await isAdmin();
@@ -31,7 +43,9 @@ export default async function CommunityBoardPage({ params }: Props) {
 
   let query = db
     .from("board_posts")
-    .select("id, title, author, created_at, is_notice, view_count, status, user_id")
+    .select("id, title, author, created_at, is_notice, view_count, status, user_id", {
+      count: "exact",
+    })
     .eq("board_id", board.id)
     .eq("status", "게시중")
     .order("is_notice", { ascending: false })
@@ -45,7 +59,22 @@ export default async function CommunityBoardPage({ params }: Props) {
     }
   }
 
-  const { data: posts } = await query;
+  const { data: posts, count } = await query.range(offset, offset + limit - 1);
+
+  const totalCount = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+
+  const rows: CommunityPostRow[] = (posts ?? []).map((post) => ({
+    id: post.id,
+    title: post.title,
+    author: post.author,
+    createdAt: post.created_at,
+    isNotice: post.is_notice,
+    viewCount: post.view_count ?? 0,
+    editable: admin || (board.allow_user_write && user !== null && user.id === post.user_id),
+  }));
+
+  const canBulkDelete = admin || (board.allow_user_write && user !== null);
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -87,70 +116,16 @@ export default async function CommunityBoardPage({ params }: Props) {
       </div>
 
       {/* Post list */}
-      <div className="rounded-xl border border-border bg-white overflow-hidden">
-        {posts && posts.length > 0 ? (
-          <ul className="divide-y divide-border">
-            {posts.map((post) => {
-              const editable = admin || (board.allow_user_write && user !== null && user.id === post.user_id);
-              return (
-                <li
-                  key={post.id}
-                  className={`flex items-center justify-between px-5 py-4 hover:bg-muted/20 transition-colors ${post.is_notice ? "bg-primary/5" : ""}`}
-                >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    {post.is_notice && (
-                      <span className="flex-shrink-0 inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold bg-primary text-white">
-                        공지
-                      </span>
-                    )}
-                    <Link
-                      href={`/community/${slug}/${post.id}`}
-                      className="text-sm font-medium text-foreground hover:text-primary hover:underline truncate transition-colors"
-                    >
-                      {post.title}
-                    </Link>
-                  </div>
-                  <div className="flex items-center gap-4 flex-shrink-0 ml-4">
-                    <span className="text-xs text-muted-foreground hidden sm:block">{post.author ?? "—"}</span>
-                    <span className="text-xs text-muted-foreground hidden sm:block">
-                      {new Date(post.created_at).toLocaleDateString("ko-KR")}
-                    </span>
-                    <span className="text-xs text-muted-foreground hidden sm:block">
-                      조회 {(post.view_count ?? 0).toLocaleString()}
-                    </span>
-                    {editable && (
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/community/${slug}/${post.id}/edit`}
-                          className="text-muted-foreground hover:text-primary transition-colors"
-                          aria-label="수정"
-                        >
-                          <Pencil size={14} />
-                        </Link>
-                        <form action={deletePost}>
-                          <input type="hidden" name="post_id" value={post.id} />
-                          <input type="hidden" name="slug" value={slug} />
-                          <button
-                            type="submit"
-                            className="text-muted-foreground hover:text-destructive transition-colors"
-                            aria-label="삭제"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </form>
-                      </div>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <div className="text-center py-16 text-muted-foreground text-sm">
-            등록된 게시물이 없습니다.
-          </div>
-        )}
-      </div>
+      <PostsList
+        slug={slug}
+        posts={rows}
+        canBulkDelete={canBulkDelete}
+        page={page}
+        limit={limit}
+        totalPages={totalPages}
+        deletePostAction={deletePost}
+        deletePostsAction={deletePosts}
+      />
     </div>
   );
 }

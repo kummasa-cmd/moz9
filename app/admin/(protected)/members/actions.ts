@@ -152,3 +152,22 @@ export async function deleteMember(formData: FormData) {
 
   revalidatePath("/admin/members");
 }
+
+export async function deleteMembers(formData: FormData) {
+  const ids = formData.getAll("ids").map(String).filter(Boolean);
+  if (ids.length === 0) return;
+
+  const supabase = createAdminClient();
+
+  const { data: members } = await supabase.from("members").select("id, user_id").in("id", ids);
+
+  await supabase.from("members").delete().in("id", ids);
+
+  for (const member of members ?? []) {
+    if (member.user_id) {
+      await supabase.auth.admin.deleteUser(member.user_id);
+    }
+  }
+
+  revalidatePath("/admin/members");
+}

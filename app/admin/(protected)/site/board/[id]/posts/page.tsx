@@ -1,35 +1,42 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil, Trash2, Tag } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Tag } from "lucide-react";
 import PageHeader from "@/components/admin/PageHeader";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { deleteBoardPost } from "./actions";
+import { deleteBoardPost, deleteBoardPosts } from "./actions";
+import PostsTable from "./PostsTable";
+import { PAGE_SIZE_OPTIONS, type AdminPostRow } from "./types";
+
+const DEFAULT_PAGE_SIZE = 10;
 
 type Props = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ page?: string; limit?: string }>;
 };
 
-export default async function AdminBoardPostsPage({ params }: Props) {
+export default async function AdminBoardPostsPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const sp = await searchParams;
+
+  const limit = PAGE_SIZE_OPTIONS.includes(Number(sp.limit))
+    ? Number(sp.limit)
+    : DEFAULT_PAGE_SIZE;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const offset = (page - 1) * limit;
+
   const supabase = createAdminClient();
 
-  const [{ data: board }, { data: posts, error }, { data: categories }] = await Promise.all([
+  const [{ data: board }, { data: posts, error, count }, { data: categories }] = await Promise.all([
     supabase.from("boards").select("id, name, use_category, use_comment").eq("id", id).maybeSingle(),
     supabase
       .from("board_posts")
-      .select("id, title, status, created_at, category_id, is_notice, author, view_count")
+      .select("id, title, status, created_at, category_id, is_notice, author, view_count", {
+        count: "exact",
+      })
       .eq("board_id", id)
       .order("is_notice", { ascending: false })
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1),
     supabase.from("board_categories").select("id, name").eq("board_id", id),
   ]);
 
@@ -48,14 +55,27 @@ export default async function AdminBoardPostsPage({ params }: Props) {
   }
 
   const categoryMap = new Map((categories ?? []).map((c) => [c.id, c.name]));
-  const colCount = board.use_category ? 8 : 7;
-  const totalCount = posts?.length ?? 0;
+  const totalCount = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+
+  const rows: AdminPostRow[] = (posts ?? []).map((p, i) => ({
+    id: p.id,
+    number: totalCount - offset - i,
+    title: p.title,
+    author: p.author,
+    createdAt: p.created_at,
+    viewCount: p.view_count ?? 0,
+    status: p.status,
+    isNotice: p.is_notice,
+    categoryName: p.category_id ? categoryMap.get(p.category_id) ?? null : null,
+    commentCount: commentCountMap.get(p.id) ?? 0,
+  }));
 
   return (
     <div>
       <PageHeader
         title={`${board.name} — 게시물 목록`}
-        description={`총 ${posts?.length ?? 0}개의 게시물이 있습니다.`}
+        description={`총 ${totalCount}개의 게시물이 있습니다.`}
         actionHref={`/admin/site/board/${id}/posts/new`}
         actionLabel="글쓰기"
         actions={
@@ -77,105 +97,16 @@ export default async function AdminBoardPostsPage({ params }: Props) {
         </p>
       )}
 
-      <div className="rounded-xl border border-border bg-white overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-12 text-center">번호</TableHead>
-              {board.use_category && <TableHead className="w-28">카테고리</TableHead>}
-              <TableHead>제목</TableHead>
-              <TableHead className="w-24">작성자</TableHead>
-              <TableHead className="w-28">등록일</TableHead>
-              <TableHead className="w-20 text-center">조회수</TableHead>
-              <TableHead className="w-20">상태</TableHead>
-              <TableHead className="text-right w-20">관리</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(posts ?? []).map((p, i) => (
-              <TableRow
-                key={p.id}
-                className={p.is_notice ? "bg-primary/5" : undefined}
-              >
-                <TableCell className="text-center text-muted-foreground tabular-nums">
-                  {totalCount - i}
-                </TableCell>
-                {board.use_category && (
-                  <TableCell className="text-muted-foreground text-sm">
-                    {p.category_id && categoryMap.has(p.category_id)
-                      ? categoryMap.get(p.category_id)
-                      : <span className="text-muted-foreground/40">—</span>}
-                  </TableCell>
-                )}
-                <TableCell className="font-medium">
-                  <div className="flex items-center gap-2">
-                    {p.is_notice && (
-                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold bg-primary text-white flex-shrink-0">
-                        공지
-                      </span>
-                    )}
-                    <Link
-                      href={`/admin/site/board/${id}/posts/${p.id}`}
-                      className="hover:text-primary hover:underline transition-colors"
-                    >
-                      {p.title}
-                    </Link>
-                    {(commentCountMap.get(p.id) ?? 0) > 0 && (
-                      <span className="text-xs text-primary font-medium flex-shrink-0">
-                        [{commentCountMap.get(p.id)}]
-                      </span>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {p.author ?? <span className="text-muted-foreground/40">—</span>}
-                </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {new Date(p.created_at).toLocaleDateString("ko-KR")}
-                </TableCell>
-                <TableCell className="text-center text-muted-foreground tabular-nums">
-                  {(p.view_count ?? 0).toLocaleString()}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={p.status === "게시중" ? "default" : "secondary"}>
-                    {p.status}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="inline-flex items-center gap-3">
-                    <Link
-                      href={`/admin/site/board/${id}/posts/${p.id}/edit`}
-                      className="text-muted-foreground hover:text-primary transition-colors"
-                      aria-label="수정"
-                    >
-                      <Pencil size={15} />
-                    </Link>
-                    <form action={deleteBoardPost}>
-                      <input type="hidden" name="id" value={p.id} />
-                      <input type="hidden" name="board_id" value={id} />
-                      <button
-                        type="submit"
-                        className="text-muted-foreground hover:text-destructive transition-colors"
-                        aria-label="삭제"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </form>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-
-            {posts && posts.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={colCount} className="text-center text-muted-foreground py-10">
-                  등록된 게시물이 없습니다.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <PostsTable
+        boardId={id}
+        posts={rows}
+        useCategory={board.use_category}
+        page={page}
+        limit={limit}
+        totalPages={totalPages}
+        deletePostAction={deleteBoardPost}
+        deletePostsAction={deleteBoardPosts}
+      />
     </div>
   );
 }

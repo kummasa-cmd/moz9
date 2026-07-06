@@ -72,3 +72,15 @@ export async function deleteBoardPost(formData: FormData) {
   revalidatePath(`/admin/site/board/${boardId}/posts`);
   revalidatePath("/admin/site/board");
 }
+
+export async function deleteBoardPosts(formData: FormData) {
+  const ids = formData.getAll("ids").map(String).filter(Boolean);
+  const boardId = String(formData.get("board_id") ?? "");
+  if (ids.length === 0) return;
+
+  const supabase = createAdminClient();
+  await supabase.from("board_posts").delete().eq("board_id", boardId).in("id", ids);
+
+  revalidatePath(`/admin/site/board/${boardId}/posts`);
+  revalidatePath("/admin/site/board");
+}

@@ -105,3 +105,26 @@ export async function deletePost(formData: FormData) {
   revalidatePath("/community");
   redirect(`/community/${slug}`);
 }
+
+export async function deletePosts(formData: FormData) {
+  const ids = formData.getAll("ids").map(String).filter(Boolean);
+  const slug = String(formData.get("slug") ?? "");
+  if (ids.length === 0) return;
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const admin = createAdminClient();
+  const { data: rows } = await admin.from("board_posts").select("id, user_id").in("id", ids);
+
+  const allowed: string[] = [];
+  for (const row of rows ?? []) {
+    if (await canEdit(user, row.user_id)) allowed.push(row.id);
+  }
+  if (allowed.length === 0) return;
+
+  await admin.from("board_posts").delete().in("id", allowed);
+
+  revalidatePath(`/community/${slug}`);
+  revalidatePath("/community");
+}
