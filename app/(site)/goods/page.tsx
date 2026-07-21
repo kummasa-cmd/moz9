@@ -7,12 +7,57 @@ export const metadata: Metadata = {
   description: "작가·1인 크리에이터를 위한 디지털 운영 파트너십 패키지 안내",
 };
 
-const plans = [
+interface Plan {
+  id: string;
+  name: string;
+  tagline: string;
+  monthly: string;
+  vat: "포함" | "별도";
+  annualMonthly?: string;
+  setup?: string;
+  billingNote?: string;
+  totalNote?: string;
+  notes?: string[];
+  popular: boolean;
+  cta: { label: string; href: string };
+  features: string[];
+  targets: string[];
+}
+
+const plans: Plan[] = [
+  {
+    id: "light",
+    name: "LIGHT",
+    tagline: "원고만 주시면 맞춤 랜딩페이지 완성",
+    monthly: "10,000",
+    vat: "포함",
+    billingNote: "1년 선납 120,000원 + 최초 셋업비 100,000원",
+    totalNote: "총 220,000원으로 1년 간 운영 걱정 끝!",
+    popular: true,
+    cta: { label: "LIGHT 시작하기", href: "/contact" },
+    features: [
+      "원페이지 랜딩페이지형 홈페이지 전용",
+      "상담포함 단 3일 속성 완공",
+      "분기별 1회(연 4회) 간단 수정",
+      "모즈나인 무료 도메인 기본제공",
+      "호스팅 완벽 포함",
+    ],
+    notes: [
+      "* 기존도메인 연결 시 별도 수수료",
+      "★ BASIC/STANDARD 업그레이드 지원",
+    ],
+    targets: [
+      "랜딩페이지 1개만 빠르게 필요한 분",
+      "원고는 준비됐고 제작 시간이 없는 분",
+      "1년 예산을 한 번에 정리하고 싶은 분",
+    ],
+  },
   {
     id: "basic",
     name: "BASIC",
     tagline: "시작하는 작가를 위한 가장 가벼운 시작",
     monthly: "70,000",
+    vat: "별도",
     annualMonthly: "60,000",
     setup: "100,000",
     popular: false,
@@ -36,9 +81,10 @@ const plans = [
     name: "STANDARD",
     tagline: "본격적으로 콘텐츠 사업을 시작하는 작가를 위해",
     monthly: "150,000",
+    vat: "별도",
     annualMonthly: "130,000",
     setup: "500,000",
-    popular: true,
+    popular: false,
     cta: { label: "STANDARD 시작하기", href: "/contact" },
     features: [
       "반-커스텀 디자인 (컬러·폰트·로고 맞춤)",
@@ -61,6 +107,7 @@ const plans = [
     name: "PREMIUM",
     tagline: "브랜드를 키우는 작가·인플루언서를 위한 풀 서비스",
     monthly: "350,000",
+    vat: "별도",
     annualMonthly: "300,000",
     setup: "1,500,000",
     popular: false,
@@ -100,7 +147,7 @@ export default function GoodsPage() {
       </div>
 
       {/* Plan cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-20">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
         {plans.map((plan) => (
           <div
             key={plan.id}
@@ -121,20 +168,35 @@ export default function GoodsPage() {
               <h3 className="text-xl font-bold text-foreground mb-2">{plan.name}</h3>
               <p className="text-sm text-muted-foreground mb-6">{plan.tagline}</p>
 
-              <div className="mb-2">
-                <span className="text-3xl font-bold text-foreground">{plan.monthly}</span>
+              <div className="mb-1.5">
+                <span className={`text-3xl font-bold ${plan.popular ? "text-primary" : "text-foreground"}`}>
+                  {plan.monthly}
+                </span>
                 <span className="text-sm text-muted-foreground">원/월</span>
               </div>
-              <p className="text-xs text-muted-foreground">
-                연납 시 월 {plan.annualMonthly}원
+              <p className="text-[11px] font-medium text-muted-foreground/80 mb-2">
+                VAT {plan.vat}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                셋업비 {plan.setup}원 (1회)
-              </p>
+
+              {plan.billingNote ? (
+                <>
+                  <p className="text-xs text-muted-foreground">{plan.billingNote}</p>
+                  <p className="text-xs font-semibold text-primary mt-1">{plan.totalNote}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    연납 시 월 {plan.annualMonthly}원
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    셋업비 {plan.setup}원 (1회)
+                  </p>
+                </>
+              )}
             </div>
 
             {/* Features */}
-            <div className="px-6 py-6 flex-1">
+            <div className="px-6 pt-6 pb-2 flex-1">
               <ul className="space-y-3">
                 {plan.features.map((f) => (
                   <li key={f} className="flex items-start gap-2.5 text-sm text-foreground">
@@ -143,6 +205,16 @@ export default function GoodsPage() {
                   </li>
                 ))}
               </ul>
+
+              {plan.notes && (
+                <div className="mt-4 space-y-1">
+                  {plan.notes.map((n) => (
+                    <p key={n} className="text-[11px] text-muted-foreground/70">
+                      {n}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Targets */}

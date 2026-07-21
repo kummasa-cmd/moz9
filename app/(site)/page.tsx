@@ -91,7 +91,45 @@ export default async function HomePage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+            {/* LIGHT */}
+            <div className="relative rounded-xl border-2 border-primary bg-white p-6 flex flex-col shadow-md">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                <span className="inline-flex items-center gap-1 text-xs font-semibold bg-primary text-white px-3 py-1 rounded-full">
+                  <Star size={11} fill="currentColor" /> 추천
+                </span>
+              </div>
+              <h3 className="text-lg font-bold text-foreground mb-1">LIGHT</h3>
+              <p className="text-sm text-muted-foreground mb-4">원페이지 랜딩형 홈페이지</p>
+              <p className="text-2xl font-bold text-primary mb-1">
+                월 10,000<span className="text-sm font-normal text-muted-foreground">원</span>
+              </p>
+              <p className="text-[11px] font-medium text-muted-foreground/80 mb-1">VAT 포함</p>
+              <p className="text-xs text-muted-foreground mb-5">
+                1년 선납 120,000원 + 셋업비 100,000원
+              </p>
+              <ul className="space-y-2 flex-1 mb-6">
+                <li className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Check size={14} className="text-primary flex-shrink-0 mt-0.5" />
+                  상담포함 단 3일 속성 완공
+                </li>
+                <li className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Check size={14} className="text-primary flex-shrink-0 mt-0.5" />
+                  분기별 1회 간단 수정
+                </li>
+                <li className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Check size={14} className="text-primary flex-shrink-0 mt-0.5" />
+                  무료 도메인 · 호스팅 포함
+                </li>
+              </ul>
+              <Link
+                href="/goods"
+                className="inline-flex items-center justify-center gap-1.5 w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
+              >
+                자세히 보기 <ArrowRight size={14} />
+              </Link>
+            </div>
+
             {/* BASIC */}
             <div className="rounded-xl border border-border bg-white p-6 flex flex-col">
               <h3 className="text-lg font-bold text-foreground mb-1">BASIC</h3>
@@ -99,6 +137,7 @@ export default async function HomePage() {
               <p className="text-2xl font-bold text-foreground mb-1">
                 월 70,000<span className="text-sm font-normal text-muted-foreground">원</span>
               </p>
+              <p className="text-[11px] font-medium text-muted-foreground/80 mb-1">VAT 별도</p>
               <p className="text-xs text-muted-foreground mb-5">셋업비 100,000원 (1회)</p>
               <ul className="space-y-2 flex-1 mb-6">
                 <li className="flex items-start gap-2 text-sm text-muted-foreground">
@@ -123,17 +162,13 @@ export default async function HomePage() {
             </div>
 
             {/* STANDARD */}
-            <div className="relative rounded-xl border-2 border-primary bg-white p-6 flex flex-col shadow-md">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                <span className="inline-flex items-center gap-1 text-xs font-semibold bg-primary text-white px-3 py-1 rounded-full">
-                  <Star size={11} fill="currentColor" /> 추천
-                </span>
-              </div>
+            <div className="rounded-xl border border-border bg-white p-6 flex flex-col">
               <h3 className="text-lg font-bold text-foreground mb-1">STANDARD</h3>
               <p className="text-sm text-muted-foreground mb-4">콘텐츠 사업을 시작하는 작가</p>
               <p className="text-2xl font-bold text-foreground mb-1">
                 월 150,000<span className="text-sm font-normal text-muted-foreground">원</span>
               </p>
+              <p className="text-[11px] font-medium text-muted-foreground/80 mb-1">VAT 별도</p>
               <p className="text-xs text-muted-foreground mb-5">셋업비 500,000원 (1회)</p>
               <ul className="space-y-2 flex-1 mb-6">
                 <li className="flex items-start gap-2 text-sm text-muted-foreground">
@@ -151,7 +186,7 @@ export default async function HomePage() {
               </ul>
               <Link
                 href="/goods"
-                className="inline-flex items-center justify-center gap-1.5 w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
+                className="inline-flex items-center justify-center gap-1.5 w-full rounded-md border border-border px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
               >
                 자세히 보기 <ArrowRight size={14} />
               </Link>
@@ -164,6 +199,7 @@ export default async function HomePage() {
               <p className="text-2xl font-bold text-foreground mb-1">
                 월 350,000<span className="text-sm font-normal text-muted-foreground">원</span>
               </p>
+              <p className="text-[11px] font-medium text-muted-foreground/80 mb-1">VAT 별도</p>
               <p className="text-xs text-muted-foreground mb-5">셋업비 1,500,000원 (1회)</p>
               <ul className="space-y-2 flex-1 mb-6">
                 <li className="flex items-start gap-2 text-sm text-muted-foreground">
