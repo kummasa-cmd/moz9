@@ -41,7 +41,7 @@ export default async function CommunityEditPostPage({ params, searchParams }: Pr
     .maybeSingle();
 
   if (!post) notFound();
-  if (!canEdit(user, post.user_id)) redirect(`/community/${slug}/${postId}`);
+  if (!(await canEdit(user, post.user_id))) redirect(`/community/${slug}/${postId}`);
 
   let categories: { id: string; name: string }[] = [];
   if (board.use_category) {
