@@ -18,10 +18,19 @@ export async function createConsultation(formData: FormData) {
   if (!user) redirect("/login?next=/mypage/consultations/new");
 
   const admin = createAdminClient();
+  const { data: member } = await admin
+    .from("members")
+    .select("name")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
   const { error } = await admin.from("consultations").insert({
     member_id: user.id,
+    name: member?.name ?? user.email ?? "마이페이지 회원",
+    email: user.email,
     subject,
     message,
+    channel: "마이페이지",
   });
 
   if (error) {
