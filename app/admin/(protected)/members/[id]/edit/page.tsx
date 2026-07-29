@@ -20,7 +20,9 @@ export default async function AdminMemberEditPage({ params, searchParams }: Edit
   const supabase = createAdminClient();
   const { data: member } = await supabase
     .from("members")
-    .select("id, name, nickname, email, phone, grade, status, memo")
+    .select(
+      "id, name, nickname, email, phone, grade, status, memo, is_partner, partner_name, partner_homepage, partner_address, partner_phone, partner_product, partner_contract_start, partner_contract_end, partner_note, partner_active"
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -87,6 +89,96 @@ export default async function AdminMemberEditPage({ params, searchParams }: Edit
         <div className="space-y-2">
           <Label htmlFor="memo">메모</Label>
           <Textarea id="memo" name="memo" rows={4} defaultValue={member.memo ?? ""} />
+        </div>
+
+        <div className="space-y-5 rounded-lg border border-border p-5">
+          <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <input
+              type="checkbox"
+              name="is_partner"
+              defaultChecked={member.is_partner}
+              className="size-4 rounded border-input"
+            />
+            거래처 여부 (관리자 전용)
+          </label>
+          <p className="text-xs text-muted-foreground -mt-3">
+            체크하면 마이페이지 회원정보 수정에서 아래 거래처 정보 항목이 활성화됩니다.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label htmlFor="partner_name">거래처명</Label>
+              <Input
+                id="partner_name"
+                name="partner_name"
+                defaultValue={member.partner_name ?? ""}
+                placeholder="미입력 시 닉네임/이름 사용"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="partner_homepage">홈페이지 주소</Label>
+              <Input id="partner_homepage" name="partner_homepage" defaultValue={member.partner_homepage ?? ""} />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="partner_address">회사 주소</Label>
+            <Input id="partner_address" name="partner_address" defaultValue={member.partner_address ?? ""} />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <Label htmlFor="partner_phone">회사 전화번호(대표 휴대폰)</Label>
+              <Input id="partner_phone" name="partner_phone" type="tel" defaultValue={member.partner_phone ?? ""} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="partner_product">이용 상품</Label>
+              <FormSelect id="partner_product" name="partner_product" defaultValue={member.partner_product ?? ""}>
+                <option value="">선택 안함</option>
+                <option value="LIGHT">LIGHT</option>
+                <option value="BASIC">BASIC</option>
+                <option value="STANDARD">STANDARD</option>
+                <option value="PREMIUM">PREMIUM</option>
+              </FormSelect>
+            </div>
+            <div />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <Label htmlFor="partner_contract_start">계약 시작일</Label>
+              <Input
+                id="partner_contract_start"
+                name="partner_contract_start"
+                type="date"
+                defaultValue={member.partner_contract_start ?? ""}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="partner_contract_end">계약 종료일</Label>
+              <Input
+                id="partner_contract_end"
+                name="partner_contract_end"
+                type="date"
+                defaultValue={member.partner_contract_end ?? ""}
+              />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              name="partner_active"
+              defaultChecked={member.partner_active}
+              className="size-4 rounded border-input"
+            />
+            활성여부 (메인 소개 노출)
+          </label>
+
+          <div className="space-y-2">
+            <Label htmlFor="partner_note">비고</Label>
+            <Textarea id="partner_note" name="partner_note" rows={3} defaultValue={member.partner_note ?? ""} />
+          </div>
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

@@ -8,5 +8,6 @@ export type MemberRow = {
   phone: string | null;
   grade: string;
   status: string;
+  isPartner: boolean;
   createdAt: string;
 };

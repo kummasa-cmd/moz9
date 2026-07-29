@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MessageCircle, ShoppingBag, CreditCard, UserCog, UserX, LogOut } from "lucide-react";
+import { LayoutDashboard, MessageCircle, ShoppingBag, CreditCard, UserCog, UserX, LogOut, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logout } from "@/app/(site)/login/actions";
 
@@ -18,10 +18,18 @@ const navItems = [
 type Props = {
   nickname: string;
   email: string;
+  isPartner?: boolean;
 };
 
-export default function MypageSidebar({ nickname, email }: Props) {
+export default function MypageSidebar({ nickname, email, isPartner }: Props) {
   const pathname = usePathname();
+  const items = isPartner
+    ? [
+        ...navItems.slice(0, 2),
+        { href: "/mypage/partner", label: "거래처 게시판", icon: Building2 },
+        ...navItems.slice(2),
+      ]
+    : navItems;
 
   return (
     <aside className="w-52 flex-shrink-0">
@@ -34,7 +42,7 @@ export default function MypageSidebar({ nickname, email }: Props) {
       {/* Navigation */}
       <nav className="rounded-xl border border-border bg-white overflow-hidden">
         <ul className="divide-y divide-border">
-          {navItems.map(({ href, label, icon: Icon, exact }) => {
+          {items.map(({ href, label, icon: Icon, exact }) => {
             const isActive = exact ? pathname === href : pathname.startsWith(href);
             return (
               <li key={href}>

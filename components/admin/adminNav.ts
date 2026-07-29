@@ -1,6 +1,7 @@
 export type AdminNavChild = {
   label: string;
   href: string;
+  children?: AdminNavChild[];
 };
 
 export type AdminNavItem = {
@@ -49,6 +50,7 @@ export const adminNav: AdminNavItem[] = [
     children: [
       { label: "상담목록", href: "/admin/consulting" },
       { label: "1대1문의", href: "/admin/consulting/inquiry" },
+      { label: "거래처 게시판", href: "/admin/consulting/partner" },
     ],
   },
   {
@@ -66,6 +68,15 @@ export const adminNav: AdminNavItem[] = [
     children: [
       { label: "메인관리", href: "/admin/site/main" },
       { label: "게시판관리", href: "/admin/site/board" },
+      {
+        label: "뉴스레터 관리",
+        href: "/admin/site/newsletter/list",
+        children: [
+          { label: "뉴스레터 발송 관리", href: "/admin/site/newsletter/manage" },
+          { label: "뉴스레터 발송 목록", href: "/admin/site/newsletter/list" },
+          { label: "통계", href: "/admin/site/newsletter/analytics" },
+        ],
+      },
       { label: "관리자관리", href: "/admin/site/admins" },
     ],
   },
@@ -74,8 +85,11 @@ export const adminNav: AdminNavItem[] = [
 export function findActiveTitle(pathname: string): string {
   for (const item of adminNav) {
     if (item.children) {
-      const child = item.children.find((c) => c.href === pathname);
-      if (child) return `${item.label} · ${child.label}`;
+      for (const child of item.children) {
+        if (child.href === pathname) return `${item.label} · ${child.label}`;
+        const grandchild = child.children?.find((g) => g.href === pathname);
+        if (grandchild) return `${item.label} · ${child.label} · ${grandchild.label}`;
+      }
     }
     if (item.href === pathname) return item.label;
   }

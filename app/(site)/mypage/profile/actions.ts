@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+const PARTNER_PRODUCTS = ["LIGHT", "BASIC", "STANDARD", "PREMIUM"];
+
 export async function updateProfile(formData: FormData) {
   const nickname = String(formData.get("nickname") ?? "").trim();
   if (!nickname) redirect("/mypage/profile?error=닉네임을 입력해 주세요.");
@@ -27,6 +29,55 @@ export async function updateProfile(formData: FormData) {
 
   revalidatePath("/mypage", "layout");
   redirect("/mypage/profile?success=1");
+}
+
+export async function updatePartnerProfile(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login?next=/mypage/profile");
+
+  const admin = createAdminClient();
+  const { data: member } = await admin
+    .from("members")
+    .select("is_partner")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!member?.is_partner) redirect("/mypage/profile");
+
+  const partner_name = String(formData.get("partner_name") ?? "").trim() || null;
+  const partner_homepage = String(formData.get("partner_homepage") ?? "").trim() || null;
+  const partner_address = String(formData.get("partner_address") ?? "").trim() || null;
+  const partner_phone = String(formData.get("partner_phone") ?? "").trim() || null;
+  const partner_product_raw = String(formData.get("partner_product") ?? "");
+  const partner_product = PARTNER_PRODUCTS.includes(partner_product_raw) ? partner_product_raw : null;
+  const partner_contract_start = String(formData.get("partner_contract_start") ?? "") || null;
+  const partner_contract_end = String(formData.get("partner_contract_end") ?? "") || null;
+  const partner_note = String(formData.get("partner_note") ?? "").trim() || null;
+  const partner_active = formData.get("partner_active") === "on";
+
+  const { error } = await admin
+    .from("members")
+    .update({
+      partner_name,
+      partner_homepage,
+      partner_address,
+      partner_phone,
+      partner_product,
+      partner_contract_start,
+      partner_contract_end,
+      partner_note,
+      partner_active,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", user.id);
+
+  if (error) {
+    redirect(`/mypage/profile?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath("/mypage/profile");
+  redirect("/mypage/profile?success=3");
 }
 
 export async function updatePassword(formData: FormData) {

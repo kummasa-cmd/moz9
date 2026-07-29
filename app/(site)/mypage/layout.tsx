@@ -12,7 +12,7 @@ export default async function MypageLayout({ children }: { children: React.React
   const admin = createAdminClient();
   const { data: member } = await admin
     .from("members")
-    .select("nickname, email")
+    .select("nickname, email, is_partner")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -21,7 +21,7 @@ export default async function MypageLayout({ children }: { children: React.React
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="flex gap-6 items-start">
-        <MypageSidebar nickname={member.nickname} email={member.email} />
+        <MypageSidebar nickname={member.nickname} email={member.email} isPartner={member.is_partner} />
         <main className="flex-1 min-w-0">{children}</main>
       </div>
     </div>

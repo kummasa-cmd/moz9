@@ -93,6 +93,17 @@ export async function updateMember(id: string, formData: FormData) {
   const status = String(formData.get("status") ?? "정상");
   const memo = String(formData.get("memo") ?? "") || null;
 
+  const is_partner = formData.get("is_partner") === "on";
+  const partner_name = String(formData.get("partner_name") ?? "") || null;
+  const partner_homepage = String(formData.get("partner_homepage") ?? "") || null;
+  const partner_address = String(formData.get("partner_address") ?? "") || null;
+  const partner_phone = String(formData.get("partner_phone") ?? "") || null;
+  const partner_product = String(formData.get("partner_product") ?? "") || null;
+  const partner_contract_start = String(formData.get("partner_contract_start") ?? "") || null;
+  const partner_contract_end = String(formData.get("partner_contract_end") ?? "") || null;
+  const partner_note = String(formData.get("partner_note") ?? "") || null;
+  const partner_active = formData.get("partner_active") === "on";
+
   if (password && password.length < 6) {
     redirect(`/admin/members/${id}/edit?error=비밀번호는 6자 이상이어야 합니다.`);
   }
@@ -101,7 +112,25 @@ export async function updateMember(id: string, formData: FormData) {
 
   const { error } = await supabase
     .from("members")
-    .update({ name, nickname, email, phone, grade, status, memo })
+    .update({
+      name,
+      nickname,
+      email,
+      phone,
+      grade,
+      status,
+      memo,
+      is_partner,
+      partner_name,
+      partner_homepage,
+      partner_address,
+      partner_phone,
+      partner_product,
+      partner_contract_start,
+      partner_contract_end,
+      partner_note,
+      partner_active,
+    })
     .eq("id", id);
 
   if (error) {
