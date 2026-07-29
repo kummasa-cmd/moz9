@@ -6,7 +6,6 @@ import { Send, CheckCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
 
 type FormValues = {
   name: string;
@@ -34,16 +33,13 @@ export default function ContactPage() {
 
   const onSubmit = async (data: FormValues) => {
     setSubmitError(null);
-    const supabase = createClient();
-    const { error } = await supabase.from("consultations").insert({
-      name: data.name,
-      email: data.email,
-      phone: data.phone || null,
-      subject: data.subject,
-      message: data.message,
+    const res = await fetch("/api/consultation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
     });
 
-    if (error) {
+    if (!res.ok) {
       setSubmitError("문의 접수 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
       return;
     }

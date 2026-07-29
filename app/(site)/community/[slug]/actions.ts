@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canEdit } from "@/lib/community-auth";
+import { notifyAdminNewSubmission, stripHtmlPreview } from "@/lib/mail";
 
 export async function createPost(slug: string, formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
@@ -23,7 +24,7 @@ export async function createPost(slug: string, formData: FormData) {
 
   const { data: board } = await admin
     .from("boards")
-    .select("id, allow_user_write")
+    .select("id, type, allow_user_write")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -32,18 +33,33 @@ export async function createPost(slug: string, formData: FormData) {
   const { data: memberData } = await admin.from("members").select("nickname").eq("user_id", user.id).maybeSingle();
   const author = memberData?.nickname ?? user.user_metadata?.name ?? user.email ?? "익명";
 
-  const { error } = await admin.from("board_posts").insert({
-    board_id: board.id,
-    title,
-    content,
-    category_id,
-    author,
-    user_id: user.id,
-    status: "게시중",
-  });
+  const { data: inserted, error } = await admin
+    .from("board_posts")
+    .insert({
+      board_id: board.id,
+      title,
+      content,
+      category_id,
+      author,
+      user_id: user.id,
+      status: "게시중",
+    })
+    .select("id")
+    .single();
 
   if (error) {
     redirect(`/community/${slug}/new?error=${encodeURIComponent(error.message)}`);
+  }
+
+  if (board.type === "개인") {
+    await notifyAdminNewSubmission(admin, {
+      boardLabel: "1대1 문의",
+      title,
+      authorName: author,
+      authorEmail: user.email ?? "",
+      preview: stripHtmlPreview(content),
+      ctaPath: `/community/${slug}/${inserted.id}`,
+    });
   }
 
   revalidatePath(`/community/${slug}`);

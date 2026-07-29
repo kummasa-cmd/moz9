@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/community-auth";
+import { notifySubmitterReply } from "@/lib/mail";
 
 export async function addComment(slug: string, postId: string, formData: FormData) {
   const content = String(formData.get("content") ?? "").trim();
@@ -39,6 +40,23 @@ export async function addComment(slug: string, postId: string, formData: FormDat
     content,
     user_id: user?.id ?? null,
   });
+
+  if (board.type === "개인" && (await isAdmin())) {
+    const { data: post } = await db.from("board_posts").select("title, user_id").eq("id", postId).maybeSingle();
+    const { data: owner } = post?.user_id
+      ? await db.from("members").select("email").eq("user_id", post.user_id).maybeSingle()
+      : { data: null };
+
+    if (post && owner?.email) {
+      await notifySubmitterReply({
+        boardLabel: "1대1 문의",
+        title: post.title,
+        toEmail: owner.email,
+        reply: content,
+        ctaPath: `/community/${slug}/${postId}`,
+      });
+    }
+  }
 
   revalidatePath(`/community/${slug}/${postId}`);
 }
