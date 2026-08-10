@@ -1,0 +1,65 @@
+import { Resend } from "resend";
+import { newsletterConfig, getUnsubscribeUrl } from "./config";
+
+export function getResendClient(): Resend {
+  if (!newsletterConfig.resendApiKey) {
+    throw new Error("RESEND_API_KEY가 설정되지 않았습니다.");
+  }
+  return new Resend(newsletterConfig.resendApiKey);
+}
+
+const OPEN_PIXEL_PLACEHOLDER = "__NEWSLETTER_OPEN_PIXEL__";
+const UNSUBSCRIBE_URL_PLACEHOLDER = "__NEWSLETTER_UNSUBSCRIBE_URL__";
+
+export function buildEmailTemplate(bodyHtml: string): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body style="margin:0;padding:24px;background:#f4f4f5;">
+    <div style="max-width:600px;margin:0 auto;background:#ffffff;padding:32px;border-radius:12px;">
+      ${bodyHtml}
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:32px 0 16px;" />
+      <p style="margin:0;font-family:'Pretendard','Inter',-apple-system,sans-serif;font-size:12px;color:#6B7280;text-align:center;">
+        더 이상 이 메일을 받고 싶지 않으시다면
+        <a href="${UNSUBSCRIBE_URL_PLACEHOLDER}" style="color:#6B7280;text-decoration:underline;">수신거부</a>
+        해 주세요.
+      </p>
+    </div>
+    <img src="${OPEN_PIXEL_PLACEHOLDER}" width="1" height="1" alt="" style="display:none;" />
+  </body>
+</html>`;
+}
+
+function wrapClickLinks(html: string, trackingToken: string): string {
+  return html.replace(/href="([^"]+)"/g, (match, url: string) => {
+    if (url.startsWith("mailto:") || url.startsWith("tel:") || url.startsWith("#")) return match;
+    if (url === UNSUBSCRIBE_URL_PLACEHOLDER) return match;
+
+    const trackedUrl = `${newsletterConfig.siteUrl}/api/track/click/${trackingToken}?url=${encodeURIComponent(url)}`;
+    return `href="${trackedUrl}"`;
+  });
+}
+
+export function personalizeEmail(
+  templateHtml: string,
+  opts: { trackingToken: string; unsubscribeToken: string },
+): string {
+  let html = wrapClickLinks(templateHtml, opts.trackingToken);
+  html = html.replaceAll(UNSUBSCRIBE_URL_PLACEHOLDER, getUnsubscribeUrl(opts.unsubscribeToken));
+  html = html.replaceAll(
+    OPEN_PIXEL_PLACEHOLDER,
+    `${newsletterConfig.siteUrl}/api/track/open/${opts.trackingToken}`,
+  );
+  return html;
+}
+
+export function chunk<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    result.push(items.slice(i, i + size));
+  }
+  return result;
+}

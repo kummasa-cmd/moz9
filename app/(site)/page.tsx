@@ -1,8 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Check, Globe, Star } from "lucide-react";
+import { ArrowRight, Check, Globe, Mail, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getOgImage } from "@/lib/og-image";
+import { getPublishedNewsletters } from "@/lib/newsletter/queries";
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -22,6 +23,9 @@ export default async function HomePage() {
       return { ...p, imageUrl };
     })
   );
+
+  const latestNewsletters = await getPublishedNewsletters(3);
+
   return (
     <>
       {/* Hero */}
@@ -313,6 +317,70 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Latest newsletter */}
+      {latestNewsletters.length > 0 && (
+        <section className="py-16 sm:py-20 bg-white">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-end justify-between mb-10">
+              <div>
+                <p className="text-sm font-medium text-accent uppercase tracking-widest mb-2">
+                  Newsletter
+                </p>
+                <h2 className="text-2xl sm:text-3xl font-bold text-foreground">최신 뉴스레터</h2>
+              </div>
+              <Link
+                href="/newsletter"
+                className="hidden sm:inline-flex items-center gap-1 text-sm text-primary font-medium hover:underline"
+              >
+                전체 보기 <ArrowRight size={14} />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {latestNewsletters.map((n) => (
+                <Link
+                  key={n.id}
+                  href={`/newsletter/${n.slug}`}
+                  className="rounded-xl border border-border bg-white overflow-hidden hover:shadow-md transition-shadow group block"
+                >
+                  <div className="h-40 overflow-hidden bg-gradient-to-br from-blue-100 via-blue-50 to-violet-50">
+                    {n.thumbnailUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={n.thumbnailUrl}
+                        alt={n.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Mail size={32} className="text-primary/20" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-5">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      {n.publishedAt ? new Date(n.publishedAt).toLocaleDateString("ko-KR") : ""}
+                    </p>
+                    <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2">
+                      {n.title}
+                    </h3>
+                  </div>
+                </Link>
+              ))}
+            </div>
+
+            <div className="mt-6 text-center sm:hidden">
+              <Link
+                href="/newsletter"
+                className="inline-flex items-center gap-1 text-sm text-primary font-medium hover:underline"
+              >
+                전체 보기 <ArrowRight size={14} />
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* About snippet */}
       <section className="py-16 sm:py-20 bg-muted/30">

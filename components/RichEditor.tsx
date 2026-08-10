@@ -62,9 +62,16 @@ function Btn({
 type RichEditorProps = {
   name: string;
   defaultValue?: string;
+  uploadEndpoint?: string;
+  onChange?: (html: string) => void;
 };
 
-export default function RichEditor({ name, defaultValue = "" }: RichEditorProps) {
+export default function RichEditor({
+  name,
+  defaultValue = "",
+  uploadEndpoint = "/api/board-image",
+  onChange,
+}: RichEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<Editor | null>(null);
   const [html, setHtml] = useState(defaultValue);
@@ -82,7 +89,7 @@ export default function RichEditor({ name, defaultValue = "" }: RichEditorProps)
     }
     const fd = new FormData();
     fd.append("file", file);
-    const res = await fetch("/api/board-image", { method: "POST", body: fd });
+    const res = await fetch(uploadEndpoint, { method: "POST", body: fd });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       alert((data as { error?: string }).error ?? "이미지 업로드에 실패했습니다.");
@@ -90,7 +97,7 @@ export default function RichEditor({ name, defaultValue = "" }: RichEditorProps)
     }
     const { url } = (await res.json()) as { url: string };
     editorRef.current?.chain().focus().setImage({ src: url }).run();
-  }, []);
+  }, [uploadEndpoint]);
 
   const editor = useEditor({
     extensions: [
@@ -99,7 +106,11 @@ export default function RichEditor({ name, defaultValue = "" }: RichEditorProps)
       Placeholder.configure({ placeholder: "내용을 입력하세요" }),
     ],
     content: defaultValue,
-    onUpdate: ({ editor: e }) => setHtml(e.getHTML()),
+    onUpdate: ({ editor: e }) => {
+      const next = e.getHTML();
+      setHtml(next);
+      onChange?.(next);
+    },
     onSelectionUpdate: ({ editor: e }) => {
       const { selection } = e.state;
       if (

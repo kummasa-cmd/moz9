@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@react-email/components": "^1.0.12",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",
     "@tiptap/extension-image": "^3.27.0",
@@ -39,6 +40,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "react-email": "^6.9.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

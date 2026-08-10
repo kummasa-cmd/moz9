@@ -14,6 +14,7 @@ const baseNavLinks = [
   { href: "/about", label: "회사소개" },
   { href: "/goods", label: "상품소개" },
   { href: "/works", label: "제작사례" },
+  { href: "/newsletter", label: "뉴스레터" },
   { href: "/community", label: "커뮤니티" },
   { href: "/contact", label: "무료상담" },
 ];
