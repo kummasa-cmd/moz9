@@ -18,6 +18,10 @@ function statusVariant(status: string) {
   return "secondary" as const;
 }
 
+function resolvePartnerName(member?: { partner_name: string | null; nickname: string | null; name: string | null } | null) {
+  return member?.partner_name || member?.nickname || member?.name || "알 수 없음";
+}
+
 export default async function AdminDashboardPage() {
   const supabase = createAdminClient();
 
@@ -29,6 +33,7 @@ export default async function AdminDashboardPage() {
     { data: recentMembers },
     { data: recentOrders },
     { data: recentConsultations },
+    { data: recentPartnerPosts },
   ] = await Promise.all([
     supabase.from("members").select("*", { count: "exact", head: true }),
     supabase.from("orders").select("*", { count: "exact", head: true }),
@@ -49,7 +54,18 @@ export default async function AdminDashboardPage() {
       .select("name, subject, status, created_at")
       .order("created_at", { ascending: false })
       .limit(3),
+    supabase
+      .from("partner_posts")
+      .select("id, member_id, title, status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5),
   ]);
+
+  const partnerMemberIds = [...new Set((recentPartnerPosts ?? []).map((p) => p.member_id))];
+  const { data: partnerMembers } = partnerMemberIds.length
+    ? await supabase.from("members").select("user_id, partner_name, nickname, name").in("user_id", partnerMemberIds)
+    : { data: [] };
+  const partnerMemberMap = new Map((partnerMembers ?? []).map((m) => [m.user_id, m]));
 
   const stats = [
     { label: "전체 회원", value: `${memberCount ?? 0}명`, icon: Users },
@@ -178,6 +194,49 @@ export default async function AdminDashboardPage() {
                 </TableRow>
               ))}
               {recentConsultations && recentConsultations.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                    데이터가 없습니다.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Recent partner board posts */}
+        <div className="rounded-xl border border-border bg-white p-5 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-foreground">최근 거래처 문의</h3>
+            <Link href="/admin/consulting/partner" className="text-xs text-primary hover:underline">
+              전체보기
+            </Link>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>거래처명</TableHead>
+                <TableHead>제목</TableHead>
+                <TableHead>등록일</TableHead>
+                <TableHead>상태</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(recentPartnerPosts ?? []).map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-medium">
+                    {resolvePartnerName(partnerMemberMap.get(p.member_id))}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{p.title}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {new Date(p.created_at).toLocaleDateString("ko-KR")}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={statusVariant(p.status)}>{p.status}</Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {recentPartnerPosts && recentPartnerPosts.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                     데이터가 없습니다.
