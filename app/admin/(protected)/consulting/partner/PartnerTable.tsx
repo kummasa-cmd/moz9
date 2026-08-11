@@ -21,7 +21,10 @@ import {
 import { PAGE_SIZE_OPTIONS, type AdminPartnerPostRow } from "./types";
 
 function statusVariant(status: string) {
-  return status === "답변완료" ? ("default" as const) : ("destructive" as const);
+  if (status === "작업완료") return "default" as const;
+  if (status === "작업중") return "secondary" as const;
+  if (status === "반려") return "outline" as const;
+  return "destructive" as const; // 작업요청
 }
 
 type Props = {

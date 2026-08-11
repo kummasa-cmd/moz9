@@ -1,17 +1,14 @@
 import { MessageSquare, Paperclip } from "lucide-react";
 import PageHeader from "@/components/admin/PageHeader";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { replyPartnerPost } from "./actions";
 import PartnerTable from "./PartnerTable";
+import PartnerStatusForm from "./PartnerStatusForm";
+import PartnerCommentItem from "./PartnerCommentItem";
 import { PAGE_SIZE_OPTIONS, type AdminPartnerPostRow, type AdminPartnerComment } from "./types";
 
 const DEFAULT_PAGE_SIZE = 10;
-
-function statusVariant(status: string) {
-  return status === "답변완료" ? ("default" as const) : ("destructive" as const);
-}
 
 function resolvePartnerName(member?: { partner_name: string | null; nickname: string | null; name: string | null } | null) {
   return member?.partner_name || member?.nickname || member?.name || "알 수 없음";
@@ -106,9 +103,12 @@ export default async function AdminPartnerBoardPage({ searchParams }: PartnerPag
                 </p>
                 <p className="text-sm text-foreground font-medium">{selectedSummary.title}</p>
               </div>
-              <Badge variant={statusVariant(selectedSummary.status)} className="flex-shrink-0 text-xs">
-                {selectedSummary.status}
-              </Badge>
+              <PartnerStatusForm
+                postId={selectedSummary.id}
+                status={selectedSummary.status}
+                page={page}
+                limit={limit}
+              />
             </div>
 
             {selectedDetail.content.trim().startsWith("<") ? (
@@ -134,18 +134,7 @@ export default async function AdminPartnerBoardPage({ searchParams }: PartnerPag
                 <p className="text-xs text-muted-foreground text-center py-4">아직 댓글이 없습니다.</p>
               )}
               {comments.map((c) => (
-                <div
-                  key={c.id}
-                  className={`rounded-lg border p-3 ${c.isAdmin ? "border-primary/30 bg-primary/5" : "border-border bg-muted/20"}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-foreground">{c.authorName}</span>
-                    <span className="text-[11px] text-muted-foreground">
-                      {new Date(c.createdAt).toLocaleDateString("ko-KR")}
-                    </span>
-                  </div>
-                  <p className="text-sm text-foreground mt-1 whitespace-pre-wrap">{c.content}</p>
-                </div>
+                <PartnerCommentItem key={c.id} comment={c} page={page} limit={limit} />
               ))}
             </div>
 

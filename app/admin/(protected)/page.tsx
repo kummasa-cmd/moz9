@@ -13,8 +13,10 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function statusVariant(status: string) {
-  if (["정상", "결제완료", "답변완료", "판매중"].includes(status)) return "default" as const;
-  if (["미답변", "탈퇴"].includes(status)) return "destructive" as const;
+  if (["정상", "결제완료", "답변완료", "판매중", "작업완료"].includes(status)) return "default" as const;
+  if (["미답변", "탈퇴", "작업요청"].includes(status)) return "destructive" as const;
+  if (status === "작업중") return "secondary" as const;
+  if (status === "반려") return "outline" as const;
   return "secondary" as const;
 }
 

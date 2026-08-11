@@ -1,20 +1,28 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, MessageSquare, Paperclip } from "lucide-react";
+import { ChevronLeft, MessageSquare, Paperclip, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { addPartnerComment } from "../actions";
+import PartnerDeleteButton from "../PartnerDeleteButton";
 
-const statusVariant = (s: string) => (s === "답변완료" ? ("default" as const) : ("destructive" as const));
+function statusVariant(status: string) {
+  if (status === "작업완료") return "default" as const;
+  if (status === "작업중") return "secondary" as const;
+  if (status === "반려") return "outline" as const;
+  return "destructive" as const; // 작업요청
+}
 
 type Props = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
 };
 
-export default async function PartnerPostDetailPage({ params }: Props) {
+export default async function PartnerPostDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const { error } = await searchParams;
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -48,6 +56,8 @@ export default async function PartnerPostDetailPage({ params }: Props) {
         <h1 className="text-lg font-bold text-foreground">거래처 게시판</h1>
       </div>
 
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
       <div className="rounded-xl border border-border bg-white p-6 space-y-5">
         <div className="flex items-start justify-between gap-4 pb-5 border-b border-border">
           <div className="min-w-0">
@@ -59,9 +69,28 @@ export default async function PartnerPostDetailPage({ params }: Props) {
               )}
             </p>
           </div>
-          <Badge variant={statusVariant(post.status)} className="flex-shrink-0 text-xs">
-            {post.status}
-          </Badge>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <Badge variant={statusVariant(post.status)} className="text-xs">
+              {post.status}
+            </Badge>
+            <Link
+              href={`/mypage/partner/${id}/edit`}
+              className="text-muted-foreground hover:text-primary transition-colors"
+              aria-label="수정"
+            >
+              <Pencil size={15} />
+            </Link>
+            {post.status === "작업요청" ? (
+              <PartnerDeleteButton postId={id} />
+            ) : (
+              <span
+                title="작업요청 상태에서만 삭제할 수 있습니다."
+                className="text-muted-foreground/40 cursor-not-allowed"
+              >
+                <Trash2 size={15} />
+              </span>
+            )}
+          </div>
         </div>
 
         {isHtml ? (

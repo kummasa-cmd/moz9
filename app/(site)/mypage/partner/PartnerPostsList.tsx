@@ -12,7 +12,12 @@ import {
 } from "@/components/ui/select";
 import { PAGE_SIZE_OPTIONS, type PartnerPostRow } from "./types";
 
-const statusVariant = (s: string) => (s === "답변완료" ? ("default" as const) : ("destructive" as const));
+function statusVariant(status: string) {
+  if (status === "작업완료") return "default" as const;
+  if (status === "작업중") return "secondary" as const;
+  if (status === "반려") return "outline" as const;
+  return "destructive" as const; // 작업요청
+}
 
 type Props = {
   posts: PartnerPostRow[];
