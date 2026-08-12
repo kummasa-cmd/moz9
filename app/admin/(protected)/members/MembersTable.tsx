@@ -121,6 +121,7 @@ export default function MembersTable({
               <TableHead>가입일</TableHead>
               <TableHead>상태</TableHead>
               <TableHead>거래처</TableHead>
+              <TableHead>컬럼회원</TableHead>
               <TableHead className="text-right">관리</TableHead>
             </TableRow>
           </TableHeader>
@@ -154,6 +155,13 @@ export default function MembersTable({
                     <Badge variant="outline">N</Badge>
                   )}
                 </TableCell>
+                <TableCell>
+                  {m.isColumnMember ? (
+                    <Badge variant="default">Y</Badge>
+                  ) : (
+                    <Badge variant="outline">N</Badge>
+                  )}
+                </TableCell>
                 <TableCell className="text-right">
                   <div className="inline-flex items-center gap-3">
                     <Link
@@ -180,7 +188,7 @@ export default function MembersTable({
 
             {members.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} className="text-center text-muted-foreground py-10">
+                <TableCell colSpan={11} className="text-center text-muted-foreground py-10">
                   등록된 회원이 없습니다.
                 </TableCell>
               </TableRow>

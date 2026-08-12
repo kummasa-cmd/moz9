@@ -93,6 +93,7 @@ export async function updateMember(id: string, formData: FormData) {
   const status = String(formData.get("status") ?? "정상");
   const memo = String(formData.get("memo") ?? "") || null;
 
+  const is_column_member = formData.get("is_column_member") === "on";
   const is_partner = formData.get("is_partner") === "on";
   const partner_name = String(formData.get("partner_name") ?? "") || null;
   const partner_homepage = String(formData.get("partner_homepage") ?? "") || null;
@@ -120,6 +121,7 @@ export async function updateMember(id: string, formData: FormData) {
       grade,
       status,
       memo,
+      is_column_member,
       is_partner,
       partner_name,
       partner_homepage,

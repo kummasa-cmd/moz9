@@ -14,6 +14,7 @@ export async function createBoard(formData: FormData) {
   const allow_user_write = !isAdminBoard && formData.get("allow_user_write") === "on";
   const use_category = formData.get("use_category") === "on";
   const use_comment = formData.get("use_comment") === "on";
+  const column_only = !isAdminBoard && formData.get("column_only") === "on";
 
   if (!/^[a-z0-9-]+$/.test(slug)) {
     redirect(
@@ -31,6 +32,7 @@ export async function createBoard(formData: FormData) {
     allow_user_write,
     use_category,
     use_comment,
+    column_only,
   });
 
   if (error) {
@@ -51,6 +53,7 @@ export async function updateBoard(id: string, formData: FormData) {
   const allow_user_write = !isAdminBoard && formData.get("allow_user_write") === "on";
   const use_category = formData.get("use_category") === "on";
   const use_comment = formData.get("use_comment") === "on";
+  const column_only = !isAdminBoard && formData.get("column_only") === "on";
 
   if (!/^[a-z0-9-]+$/.test(slug)) {
     redirect(
@@ -61,7 +64,7 @@ export async function updateBoard(id: string, formData: FormData) {
   const supabase = createAdminClient();
   const { error } = await supabase
     .from("boards")
-    .update({ name, slug, type, sort_order, is_visible, allow_user_write, use_category, use_comment })
+    .update({ name, slug, type, sort_order, is_visible, allow_user_write, use_category, use_comment, column_only })
     .eq("id", id);
 
   if (error) {

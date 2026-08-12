@@ -37,11 +37,13 @@ export const adminNav: AdminNavItem[] = [
     ],
   },
   {
-    label: "주문관리",
+    label: "결제관리",
     href: "/admin/orders",
     children: [
-      { label: "주문목록", href: "/admin/orders" },
-      { label: "주문등록", href: "/admin/orders/new" },
+      { label: "결제목록", href: "/admin/orders" },
+      { label: "결제등록", href: "/admin/orders/new" },
+      { label: "거래처목록", href: "/admin/orders/vendors" },
+      { label: "거래처 게시판", href: "/admin/consulting/partner" },
     ],
   },
   {
@@ -50,7 +52,16 @@ export const adminNav: AdminNavItem[] = [
     children: [
       { label: "상담목록", href: "/admin/consulting" },
       { label: "1대1문의", href: "/admin/consulting/inquiry" },
-      { label: "거래처 게시판", href: "/admin/consulting/partner" },
+    ],
+  },
+  {
+    label: "컬럼관리",
+    href: "/admin/site/board/a1111111-0000-4000-8000-000000000001/posts",
+    children: [
+      { label: "컬럼목록", href: "/admin/site/board/a1111111-0000-4000-8000-000000000001/posts" },
+      { label: "연재목록", href: "/admin/site/board/a1111111-0000-4000-8000-000000000002/posts" },
+      { label: "정보목록", href: "/admin/site/board/a1111111-0000-4000-8000-000000000003/posts" },
+      { label: "광고목록", href: "/admin/site/board/a1111111-0000-4000-8000-000000000004/posts" },
     ],
   },
   {

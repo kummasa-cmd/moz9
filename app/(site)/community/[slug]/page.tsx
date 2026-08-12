@@ -1,9 +1,9 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { Pencil, Lock, ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isAdmin } from "@/lib/community-auth";
+import { isAdmin, isColumnMember } from "@/lib/community-auth";
 import { deletePost, deletePosts } from "./actions";
 import PostsList from "./PostsList";
 import { PAGE_SIZE_OPTIONS, type CommunityPostRow } from "./types";
@@ -32,12 +32,23 @@ export default async function CommunityBoardPage({ params, searchParams }: Props
 
   const { data: board } = await db
     .from("boards")
-    .select("id, name, slug, type, allow_user_write, use_category")
+    .select("id, name, slug, type, allow_user_write, use_category, column_only")
     .eq("slug", slug)
     .eq("is_visible", true)
     .maybeSingle();
 
   if (!board) notFound();
+
+  if (board.column_only && !admin) {
+    if (!user) redirect(`/login?next=/community/${slug}`);
+    if (!(await isColumnMember(user.id))) {
+      return (
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
+          <p className="text-muted-foreground">컬럼 회원만 이용할 수 있습니다.</p>
+        </div>
+      );
+    }
+  }
 
   const isPrivate = board.type === "개인";
 

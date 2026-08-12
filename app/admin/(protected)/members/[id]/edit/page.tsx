@@ -21,7 +21,7 @@ export default async function AdminMemberEditPage({ params, searchParams }: Edit
   const { data: member } = await supabase
     .from("members")
     .select(
-      "id, name, nickname, email, phone, grade, status, memo, is_partner, partner_name, partner_homepage, partner_address, partner_phone, partner_product, partner_contract_start, partner_contract_end, partner_note, partner_active"
+      "id, name, nickname, email, phone, grade, status, memo, is_partner, partner_name, partner_homepage, partner_address, partner_phone, partner_product, partner_contract_start, partner_contract_end, partner_note, partner_active, is_column_member"
     )
     .eq("id", id)
     .maybeSingle();
@@ -90,6 +90,19 @@ export default async function AdminMemberEditPage({ params, searchParams }: Edit
           <Label htmlFor="memo">메모</Label>
           <Textarea id="memo" name="memo" rows={4} defaultValue={member.memo ?? ""} />
         </div>
+
+        <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <input
+            type="checkbox"
+            name="is_column_member"
+            defaultChecked={member.is_column_member}
+            className="size-4 rounded border-input"
+          />
+          컬럼 회원 여부
+        </label>
+        <p className="text-xs text-muted-foreground -mt-3">
+          체크하면 컬럼 회원 전용으로 설정된 게시판(컬럼/연재/정보/광고)에 사용자 페이지에서 접근할 수 있습니다.
+        </p>
 
         <div className="space-y-5 rounded-lg border border-border p-5">
           <label className="flex items-center gap-2 text-sm font-semibold text-foreground">

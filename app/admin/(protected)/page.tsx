@@ -13,8 +13,8 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function statusVariant(status: string) {
-  if (["정상", "결제완료", "답변완료", "판매중", "작업완료"].includes(status)) return "default" as const;
-  if (["미답변", "탈퇴", "작업요청"].includes(status)) return "destructive" as const;
+  if (["정상", "결제완료", "입금완료", "답변완료", "판매중", "작업완료"].includes(status)) return "default" as const;
+  if (["미답변", "탈퇴", "작업요청", "환불"].includes(status)) return "destructive" as const;
   if (status === "작업중") return "secondary" as const;
   if (status === "반려") return "outline" as const;
   return "secondary" as const;
@@ -48,7 +48,7 @@ export default async function AdminDashboardPage() {
       .limit(3),
     supabase
       .from("orders")
-      .select("order_no, customer, product, status")
+      .select("id, company_name, product_name, status")
       .order("created_at", { ascending: false })
       .limit(3),
     supabase
@@ -137,18 +137,16 @@ export default async function AdminDashboardPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>주문번호</TableHead>
-                <TableHead>고객</TableHead>
-                <TableHead>상품</TableHead>
+                <TableHead>회사명</TableHead>
+                <TableHead>상품명</TableHead>
                 <TableHead>상태</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {(recentOrders ?? []).map((o) => (
-                <TableRow key={o.order_no}>
-                  <TableCell className="font-medium">{o.order_no}</TableCell>
-                  <TableCell className="text-muted-foreground">{o.customer}</TableCell>
-                  <TableCell className="text-muted-foreground">{o.product}</TableCell>
+                <TableRow key={o.id}>
+                  <TableCell className="font-medium">{o.company_name ?? "-"}</TableCell>
+                  <TableCell className="text-muted-foreground">{o.product_name ?? "-"}</TableCell>
                   <TableCell>
                     <Badge variant={statusVariant(o.status)}>{o.status}</Badge>
                   </TableCell>
@@ -156,7 +154,7 @@ export default async function AdminDashboardPage() {
               ))}
               {recentOrders && recentOrders.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
                     데이터가 없습니다.
                   </TableCell>
                 </TableRow>

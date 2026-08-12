@@ -9,5 +9,6 @@ export type MemberRow = {
   grade: string;
   status: string;
   isPartner: boolean;
+  isColumnMember: boolean;
   createdAt: string;
 };

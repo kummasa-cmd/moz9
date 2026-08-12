@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import RichEditor from "@/components/RichEditor";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isColumnMember } from "@/lib/community-auth";
 import { createPost } from "../actions";
 
 type Props = {
@@ -25,12 +26,14 @@ export default async function CommunityNewPostPage({ params, searchParams }: Pro
 
   const { data: board } = await db
     .from("boards")
-    .select("id, name, allow_user_write, type, use_category")
+    .select("id, name, allow_user_write, type, use_category, column_only")
     .eq("slug", slug)
     .eq("is_visible", true)
     .maybeSingle();
 
   if (!board || !board.allow_user_write) notFound();
+
+  if (board.column_only && !(await isColumnMember(user.id))) notFound();
 
   let categories: { id: string; name: string }[] = [];
   if (board.use_category) {

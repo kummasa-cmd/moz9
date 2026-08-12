@@ -22,7 +22,9 @@ export default async function AdminMembersPage({ searchParams }: Props) {
   const supabase = createAdminClient();
   const { data: members, error, count } = await supabase
     .from("members")
-    .select("id, name, nickname, email, phone, grade, status, is_partner, created_at", { count: "exact" })
+    .select("id, name, nickname, email, phone, grade, status, is_partner, is_column_member, created_at", {
+      count: "exact",
+    })
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -38,6 +40,7 @@ export default async function AdminMembersPage({ searchParams }: Props) {
     grade: m.grade,
     status: m.status,
     isPartner: m.is_partner,
+    isColumnMember: m.is_column_member,
     createdAt: m.created_at,
   }));
 

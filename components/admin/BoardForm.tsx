@@ -12,6 +12,7 @@ type BoardDefaultValues = {
   allow_user_write?: boolean;
   use_category?: boolean;
   use_comment?: boolean;
+  column_only?: boolean;
 };
 
 type BoardFormProps = {
@@ -144,6 +145,13 @@ export default function BoardForm({
             label="댓글 사용"
             description="댓글 및 답글 기능을 활성화합니다."
             defaultChecked={defaultValues.use_comment ?? false}
+          />
+          <CheckField
+            id="column_only"
+            name="column_only"
+            label="컬럼 회원 전용"
+            description="체크하면 회원관리에서 컬럼 회원으로 체크된 회원만 사용자 페이지에서 접근할 수 있습니다."
+            defaultChecked={defaultValues.column_only ?? false}
           />
         </div>
       </div>

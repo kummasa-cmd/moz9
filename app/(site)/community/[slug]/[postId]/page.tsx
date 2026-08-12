@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isAdmin } from "@/lib/community-auth";
+import { isAdmin, isColumnMember } from "@/lib/community-auth";
 import { deletePost } from "../actions";
 import { addComment, deleteComment } from "./actions";
 
@@ -35,12 +35,17 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
 
   const { data: board } = await db
     .from("boards")
-    .select("id, name, slug, type, use_comment, allow_user_write")
+    .select("id, name, slug, type, use_comment, allow_user_write, column_only")
     .eq("slug", slug)
     .eq("is_visible", true)
     .maybeSingle();
 
   if (!board) notFound();
+
+  if (board.column_only && !admin) {
+    if (!user) redirect(`/login?next=/community/${slug}/${postId}`);
+    if (!(await isColumnMember(user.id))) redirect(`/community/${slug}`);
+  }
 
   const isPrivate = board.type === "개인";
 
