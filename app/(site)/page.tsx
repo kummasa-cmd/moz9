@@ -146,7 +146,7 @@ export default async function HomePage() {
               <ul className="space-y-2 flex-1 mb-6">
                 <li className="flex items-start gap-2 text-sm text-muted-foreground">
                   <Check size={14} className="text-primary flex-shrink-0 mt-0.5" />
-                  템플릿 3종 · 페이지 5개
+                  커스텀 디자인 · 페이지 5개까지
                 </li>
                 <li className="flex items-start gap-2 text-sm text-muted-foreground">
                   <Check size={14} className="text-primary flex-shrink-0 mt-0.5" />
@@ -185,7 +185,7 @@ export default async function HomePage() {
                 </li>
                 <li className="flex items-start gap-2 text-sm text-muted-foreground">
                   <Check size={14} className="text-primary flex-shrink-0 mt-0.5" />
-                  결제 연동 · 뉴스레터 월 1회
+                  결제 연동 가능
                 </li>
               </ul>
               <Link
@@ -208,15 +208,15 @@ export default async function HomePage() {
               <ul className="space-y-2 flex-1 mb-6">
                 <li className="flex items-start gap-2 text-sm text-muted-foreground">
                   <Check size={14} className="text-primary flex-shrink-0 mt-0.5" />
-                  풀 커스텀 · 페이지 무제한
+                  커스텀 디자인 · 페이지 제한 없음
                 </li>
                 <li className="flex items-start gap-2 text-sm text-muted-foreground">
                   <Check size={14} className="text-primary flex-shrink-0 mt-0.5" />
-                  멤버십·구독 결제 · 도메인 2개
+                  멤버십·구독 결제 · 개인 도메인 2개
                 </li>
                 <li className="flex items-start gap-2 text-sm text-muted-foreground">
                   <Check size={14} className="text-primary flex-shrink-0 mt-0.5" />
-                  PWA 웹앱 · 매출 리포트
+                  매출 리포트 월 1회 제공
                 </li>
               </ul>
               <Link
