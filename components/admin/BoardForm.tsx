@@ -150,7 +150,7 @@ export default function BoardForm({
             id="column_only"
             name="column_only"
             label="컬럼 회원 전용"
-            description="체크하면 회원관리에서 컬럼 회원으로 체크된 회원만 사용자 페이지에서 접근할 수 있습니다."
+            description="체크하면 로그인 회원 누구나 열람할 수 있지만, 글쓰기·수정·삭제는 회원관리에서 컬럼 회원으로 체크된 회원만 가능합니다."
             defaultChecked={defaultValues.column_only ?? false}
           />
         </div>

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { canEdit } from "@/lib/community-auth";
+import { canEdit, canWriteToBoard } from "@/lib/community-auth";
 import { notifyAdminNewSubmission, stripHtmlPreview } from "@/lib/mail";
 
 export async function createPost(slug: string, formData: FormData) {
@@ -24,11 +24,11 @@ export async function createPost(slug: string, formData: FormData) {
 
   const { data: board } = await admin
     .from("boards")
-    .select("id, type, allow_user_write")
+    .select("id, type, allow_user_write, column_only")
     .eq("slug", slug)
     .maybeSingle();
 
-  if (!board?.allow_user_write) redirect(`/community/${slug}`);
+  if (!board || !(await canWriteToBoard(user, board))) redirect(`/community/${slug}`);
 
   const { data: memberData } = await admin.from("members").select("nickname").eq("user_id", user.id).maybeSingle();
   const author = memberData?.nickname ?? user.user_metadata?.name ?? user.email ?? "익명";
@@ -82,13 +82,14 @@ export async function updatePost(slug: string, postId: string, formData: FormDat
 
   const admin = createAdminClient();
 
-  const { data: post } = await admin
-    .from("board_posts")
-    .select("user_id")
-    .eq("id", postId)
-    .maybeSingle();
+  const [{ data: post }, { data: board }] = await Promise.all([
+    admin.from("board_posts").select("user_id").eq("id", postId).maybeSingle(),
+    admin.from("boards").select("column_only").eq("slug", slug).maybeSingle(),
+  ]);
 
-  if (!(await canEdit(user, post?.user_id ?? null))) redirect(`/community/${slug}/${postId}`);
+  if (!(await canEdit(user, post?.user_id ?? null, board?.column_only ?? false))) {
+    redirect(`/community/${slug}/${postId}`);
+  }
 
   await admin.from("board_posts").update({ title, content, category_id }).eq("id", postId);
 
@@ -107,13 +108,12 @@ export async function deletePost(formData: FormData) {
 
   const admin = createAdminClient();
 
-  const { data: post } = await admin
-    .from("board_posts")
-    .select("user_id")
-    .eq("id", postId)
-    .maybeSingle();
+  const [{ data: post }, { data: board }] = await Promise.all([
+    admin.from("board_posts").select("user_id").eq("id", postId).maybeSingle(),
+    admin.from("boards").select("column_only").eq("slug", slug).maybeSingle(),
+  ]);
 
-  if (!(await canEdit(user, post?.user_id ?? null))) return;
+  if (!(await canEdit(user, post?.user_id ?? null, board?.column_only ?? false))) return;
 
   await admin.from("board_posts").delete().eq("id", postId);
 
@@ -131,11 +131,14 @@ export async function deletePosts(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const admin = createAdminClient();
-  const { data: rows } = await admin.from("board_posts").select("id, user_id").in("id", ids);
+  const [{ data: rows }, { data: board }] = await Promise.all([
+    admin.from("board_posts").select("id, user_id").in("id", ids),
+    admin.from("boards").select("column_only").eq("slug", slug).maybeSingle(),
+  ]);
 
   const allowed: string[] = [];
   for (const row of rows ?? []) {
-    if (await canEdit(user, row.user_id)) allowed.push(row.id);
+    if (await canEdit(user, row.user_id, board?.column_only ?? false)) allowed.push(row.id);
   }
   if (allowed.length === 0) return;
 

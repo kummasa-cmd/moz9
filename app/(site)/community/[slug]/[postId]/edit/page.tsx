@@ -26,7 +26,7 @@ export default async function CommunityEditPostPage({ params, searchParams }: Pr
 
   const { data: board } = await db
     .from("boards")
-    .select("id, name, use_category")
+    .select("id, name, use_category, column_only")
     .eq("slug", slug)
     .eq("is_visible", true)
     .maybeSingle();
@@ -41,7 +41,7 @@ export default async function CommunityEditPostPage({ params, searchParams }: Pr
     .maybeSingle();
 
   if (!post) notFound();
-  if (!(await canEdit(user, post.user_id))) redirect(`/community/${slug}/${postId}`);
+  if (!(await canEdit(user, post.user_id, board.column_only))) redirect(`/community/${slug}/${postId}`);
 
   let categories: { id: string; name: string }[] = [];
   if (board.use_category) {

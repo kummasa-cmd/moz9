@@ -39,16 +39,11 @@ export default async function CommunityBoardPage({ params, searchParams }: Props
 
   if (!board) notFound();
 
-  if (board.column_only && !admin) {
-    if (!user) redirect(`/login?next=/community/${slug}`);
-    if (!(await isColumnMember(user.id))) {
-      return (
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
-          <p className="text-muted-foreground">컬럼 회원만 이용할 수 있습니다.</p>
-        </div>
-      );
-    }
+  if (board.column_only && !admin && !user) {
+    redirect(`/login?next=/community/${slug}`);
   }
+
+  const columnMember = admin || (board.column_only && user !== null && (await isColumnMember(user.id)));
 
   const isPrivate = board.type === "개인";
 
@@ -82,10 +77,16 @@ export default async function CommunityBoardPage({ params, searchParams }: Props
     createdAt: post.created_at,
     isNotice: post.is_notice,
     viewCount: post.view_count ?? 0,
-    editable: admin || (board.allow_user_write && user !== null && user.id === post.user_id),
+    editable:
+      admin ||
+      (board.allow_user_write &&
+        user !== null &&
+        user.id === post.user_id &&
+        (!board.column_only || columnMember)),
   }));
 
-  const canBulkDelete = admin || (board.allow_user_write && user !== null);
+  const canWrite = admin || (board.allow_user_write && user !== null && (!board.column_only || columnMember));
+  const canBulkDelete = canWrite;
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -103,7 +104,7 @@ export default async function CommunityBoardPage({ params, searchParams }: Props
             {isPrivate && <Lock size={16} className="text-muted-foreground" />}
             <h1 className="text-2xl font-bold text-foreground">{board.name}</h1>
           </div>
-          {board.allow_user_write && user && (
+          {canWrite && (
             <Link
               href={`/community/${slug}/new`}
               className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"

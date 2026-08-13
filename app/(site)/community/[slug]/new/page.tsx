@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import RichEditor from "@/components/RichEditor";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isColumnMember } from "@/lib/community-auth";
+import { canWriteToBoard } from "@/lib/community-auth";
 import { createPost } from "../actions";
 
 type Props = {
@@ -31,9 +31,8 @@ export default async function CommunityNewPostPage({ params, searchParams }: Pro
     .eq("is_visible", true)
     .maybeSingle();
 
-  if (!board || !board.allow_user_write) notFound();
-
-  if (board.column_only && !(await isColumnMember(user.id))) notFound();
+  if (!board) notFound();
+  if (!(await canWriteToBoard(user, board))) notFound();
 
   let categories: { id: string; name: string }[] = [];
   if (board.use_category) {

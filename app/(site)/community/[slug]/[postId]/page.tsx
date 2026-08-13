@@ -42,10 +42,11 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
 
   if (!board) notFound();
 
-  if (board.column_only && !admin) {
-    if (!user) redirect(`/login?next=/community/${slug}/${postId}`);
-    if (!(await isColumnMember(user.id))) redirect(`/community/${slug}`);
+  if (board.column_only && !admin && !user) {
+    redirect(`/login?next=/community/${slug}/${postId}`);
   }
+
+  const columnMember = admin || (board.column_only && user !== null && (await isColumnMember(user.id)));
 
   const isPrivate = board.type === "개인";
 
@@ -89,7 +90,12 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
     }
   }
 
-  const editable = admin || (board.allow_user_write && user !== null && user.id === post.user_id);
+  const editable =
+    admin ||
+    (board.allow_user_write &&
+      user !== null &&
+      user.id === post.user_id &&
+      (!board.column_only || columnMember));
   const displayDate = new Date(post.published_at ?? post.created_at).toLocaleDateString("ko-KR", {
     year: "numeric", month: "long", day: "numeric",
   });
