@@ -42,7 +42,9 @@ export default function RootLayout({
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"
         />
       </head>
-      <body className="min-h-full antialiased">{children}</body>
+      <body className="min-h-full antialiased" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }
