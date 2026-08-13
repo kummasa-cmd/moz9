@@ -15,10 +15,6 @@ function formatDate(value: string | null) {
   return value ? new Date(value).toLocaleDateString("ko-KR") : "-";
 }
 
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("ko-KR");
-}
-
 function formatAmount(value: number) {
   return `${Number(value).toLocaleString("ko-KR")}원`;
 }
@@ -49,7 +45,7 @@ export default async function PaymentDetailPage({ params }: Props) {
   const { data: order } = await admin
     .from("orders")
     .select(
-      "id, order_code, company_name, category, vat_type, product_name, total_amount, paid_amount, refund_amount, status, paid_at, manager_name, manager_phone, manager_email, contract_start, contract_end, memo, created_at, updated_at"
+      "id, order_code, company_name, category, vat_type, product_name, total_amount, paid_amount, refund_amount, status, paid_at, manager_name, manager_phone, manager_email, contract_start, contract_end, memo"
     )
     .eq("id", id)
     .eq("manager_member_id", member.id)
@@ -85,10 +81,10 @@ export default async function PaymentDetailPage({ params }: Props) {
           <Field label="부가세 여부" value={order.vat_type} />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 pt-5 border-t border-border">
+        <div className={`grid grid-cols-1 gap-5 pt-5 border-t border-border ${order.refund_amount > 0 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
           <Field label="총금액" value={formatAmount(order.total_amount)} />
           <Field label="입금액" value={formatAmount(order.paid_amount)} />
-          <Field label="환불금액" value={formatAmount(order.refund_amount)} />
+          {order.refund_amount > 0 && <Field label="환불금액" value={formatAmount(order.refund_amount)} />}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-5 border-t border-border">
@@ -113,11 +109,6 @@ export default async function PaymentDetailPage({ params }: Props) {
             <p className="text-sm text-foreground whitespace-pre-wrap">{order.memo}</p>
           </div>
         )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-5 border-t border-border">
-          <Field label="등록일" value={formatDateTime(order.created_at)} />
-          <Field label="수정일" value={formatDateTime(order.updated_at)} />
-        </div>
       </div>
     </div>
   );

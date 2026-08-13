@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { FormSelect } from "@/components/admin/FormSelect";
 import PageHeader from "@/components/admin/PageHeader";
+import MemberAvatarUpload from "@/components/mypage/MemberAvatarUpload";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { updateMember } from "../../actions";
 
@@ -21,7 +22,7 @@ export default async function AdminMemberEditPage({ params, searchParams }: Edit
   const { data: member } = await supabase
     .from("members")
     .select(
-      "id, name, nickname, email, phone, grade, status, memo, is_partner, partner_name, partner_homepage, partner_address, partner_phone, partner_product, partner_contract_start, partner_contract_end, partner_note, partner_active, is_column_member"
+      "id, name, nickname, email, phone, grade, status, memo, avatar_url, bio, is_partner, partner_name, partner_homepage, partner_address, partner_phone, partner_product, partner_contract_start, partner_contract_end, partner_note, partner_active, is_column_member"
     )
     .eq("id", id)
     .maybeSingle();
@@ -36,6 +37,11 @@ export default async function AdminMemberEditPage({ params, searchParams }: Edit
         action={updateMember.bind(null, member.id)}
         className="rounded-xl border border-border bg-white p-6 space-y-6"
       >
+        <div className="space-y-2">
+          <Label>프로필 사진</Label>
+          <MemberAvatarUpload name="avatar_url" defaultValue={member.avatar_url} />
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div className="space-y-2">
             <Label htmlFor="name">
@@ -48,6 +54,11 @@ export default async function AdminMemberEditPage({ params, searchParams }: Edit
             <Label htmlFor="nickname">닉네임</Label>
             <Input id="nickname" name="nickname" defaultValue={member.nickname ?? ""} />
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bio">자기소개</Label>
+          <Textarea id="bio" name="bio" rows={5} defaultValue={member.bio ?? ""} placeholder="5줄 이내" />
         </div>
 
         <div className="space-y-2">

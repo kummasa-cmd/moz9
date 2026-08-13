@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MessageCircle, ShoppingBag, CreditCard, UserCog, UserX, LogOut, Building2 } from "lucide-react";
+import { LayoutDashboard, MessageCircle, CreditCard, UserCog, UserX, LogOut, Building2, Newspaper } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logout } from "@/app/(site)/login/actions";
 
 const navItems = [
   { href: "/mypage", label: "대시보드", icon: LayoutDashboard, exact: true },
   { href: "/mypage/consultations", label: "상담 내역", icon: MessageCircle },
-  { href: "/mypage/orders", label: "주문 내역", icon: ShoppingBag },
+  { href: "/mypage/column", label: "컬럼 게시판", icon: Newspaper },
   { href: "/mypage/payments", label: "결제 내역", icon: CreditCard },
   { href: "/mypage/profile", label: "회원정보 수정", icon: UserCog },
   { href: "/mypage/withdraw", label: "회원탈퇴", icon: UserX },

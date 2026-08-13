@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import MemberAvatarUpload from "@/components/mypage/MemberAvatarUpload";
 import { updateProfile, updatePassword, updatePartnerProfile } from "./actions";
 
 type Props = {
@@ -18,7 +19,7 @@ export default async function ProfilePage({ searchParams }: Props) {
   const { data: member } = await admin
     .from("members")
     .select(
-      "nickname, email, created_at, is_partner, partner_name, partner_homepage, partner_address, partner_phone, partner_product, partner_contract_start, partner_contract_end, partner_note, partner_active"
+      "nickname, email, created_at, avatar_url, bio, homepage, is_partner, partner_name, partner_homepage, partner_address, partner_phone, partner_product, partner_contract_start, partner_contract_end, partner_note, partner_active"
     )
     .eq("user_id", user!.id)
     .maybeSingle();
@@ -28,7 +29,7 @@ export default async function ProfilePage({ searchParams }: Props) {
       <h1 className="text-lg font-bold text-foreground">회원정보 수정</h1>
 
       {success === "1" && (
-        <p className="text-sm text-green-600 bg-green-50 rounded-lg px-4 py-3">닉네임이 변경되었습니다.</p>
+        <p className="text-sm text-green-600 bg-green-50 rounded-lg px-4 py-3">회원 정보가 저장되었습니다.</p>
       )}
       {success === "2" && (
         <p className="text-sm text-green-600 bg-green-50 rounded-lg px-4 py-3">비밀번호가 변경되었습니다.</p>
@@ -51,6 +52,11 @@ export default async function ProfilePage({ searchParams }: Props) {
 
         <form action={updateProfile} className="space-y-4">
           <div className="space-y-2">
+            <Label>프로필 사진</Label>
+            <MemberAvatarUpload name="avatar_url" defaultValue={member?.avatar_url} />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="nickname">닉네임</Label>
             <Input
               id="nickname"
@@ -60,11 +66,34 @@ export default async function ProfilePage({ searchParams }: Props) {
               placeholder="닉네임을 입력하세요"
             />
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="homepage">홈페이지 주소</Label>
+            <Input
+              id="homepage"
+              name="homepage"
+              type="url"
+              defaultValue={member?.homepage ?? ""}
+              placeholder="https://example.com"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="bio">자기소개</Label>
+            <Textarea
+              id="bio"
+              name="bio"
+              rows={5}
+              defaultValue={member?.bio ?? ""}
+              placeholder="자기소개를 입력하세요 (5줄 이내)"
+            />
+          </div>
+
           <button
             type="submit"
             className="inline-flex items-center justify-center rounded-md bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
           >
-            닉네임 변경
+            기본 정보 저장
           </button>
         </form>
       </div>

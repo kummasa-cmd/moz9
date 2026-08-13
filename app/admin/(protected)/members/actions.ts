@@ -92,6 +92,13 @@ export async function updateMember(id: string, formData: FormData) {
   const grade = String(formData.get("grade") ?? "일반");
   const status = String(formData.get("status") ?? "정상");
   const memo = String(formData.get("memo") ?? "") || null;
+  const avatar_url = String(formData.get("avatar_url") ?? "").trim() || null;
+  const bio =
+    String(formData.get("bio") ?? "")
+      .trim()
+      .split("\n")
+      .slice(0, 5)
+      .join("\n") || null;
 
   const is_column_member = formData.get("is_column_member") === "on";
   const is_partner = formData.get("is_partner") === "on";
@@ -121,6 +128,8 @@ export async function updateMember(id: string, formData: FormData) {
       grade,
       status,
       memo,
+      avatar_url,
+      bio,
       is_column_member,
       is_partner,
       partner_name,

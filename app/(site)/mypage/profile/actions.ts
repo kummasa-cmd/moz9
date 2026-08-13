@@ -11,6 +11,15 @@ export async function updateProfile(formData: FormData) {
   const nickname = String(formData.get("nickname") ?? "").trim();
   if (!nickname) redirect("/mypage/profile?error=닉네임을 입력해 주세요.");
 
+  const avatar_url = String(formData.get("avatar_url") ?? "").trim() || null;
+  const homepage = String(formData.get("homepage") ?? "").trim() || null;
+  const bio =
+    String(formData.get("bio") ?? "")
+      .trim()
+      .split("\n")
+      .slice(0, 5)
+      .join("\n") || null;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/mypage/profile");
@@ -18,7 +27,7 @@ export async function updateProfile(formData: FormData) {
   const admin = createAdminClient();
   const { error } = await admin
     .from("members")
-    .update({ nickname, updated_at: new Date().toISOString() })
+    .update({ nickname, avatar_url, homepage, bio, updated_at: new Date().toISOString() })
     .eq("user_id", user.id);
 
   if (error) {
