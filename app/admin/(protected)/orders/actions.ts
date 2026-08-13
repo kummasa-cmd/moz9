@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { generateOrderCode } from "@/lib/order-code";
 
 export type OrderVendorResult = {
   id: string;
@@ -62,7 +63,8 @@ export async function createOrder(formData: FormData) {
   }
 
   const supabase = createAdminClient();
-  const { error } = await supabase.from("orders").insert(fields);
+  const order_code = await generateOrderCode(supabase);
+  const { error } = await supabase.from("orders").insert({ ...fields, order_code });
 
   if (error) {
     redirect(`/admin/orders/new?error=${encodeURIComponent(error.message)}`);

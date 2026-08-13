@@ -23,7 +23,7 @@ export default async function AdminOrderEditPage({ params, searchParams }: Props
   const { data: order } = await supabase
     .from("orders")
     .select(
-      "id, vendor_id, company_name, category, vat_type, product_name, total_amount, paid_amount, refund_amount, status, paid_at, manager_member_id, manager_name, manager_phone, manager_email, contract_start, contract_end, memo, is_active, created_at, updated_at"
+      "id, order_code, vendor_id, company_name, category, vat_type, product_name, total_amount, paid_amount, refund_amount, status, paid_at, manager_member_id, manager_name, manager_phone, manager_email, contract_start, contract_end, memo, is_active, created_at, updated_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -154,7 +154,11 @@ export default async function AdminOrderEditPage({ params, searchParams }: Props
           </FormSelect>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm text-muted-foreground">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-sm text-muted-foreground">
+          <div className="space-y-1">
+            <Label className="text-muted-foreground">결제번호</Label>
+            <p className="font-mono">{order.order_code}</p>
+          </div>
           <div className="space-y-1">
             <Label className="text-muted-foreground">등록일</Label>
             <p>{new Date(order.created_at).toLocaleString("ko-KR")}</p>

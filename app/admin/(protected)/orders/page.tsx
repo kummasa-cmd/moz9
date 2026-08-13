@@ -46,7 +46,7 @@ export default async function AdminOrdersPage({ searchParams }: Props) {
   const { data: orders, error, count } = await supabase
     .from("orders")
     .select(
-      "id, company_name, manager_name, category, product_name, contract_start, contract_end, total_amount, status, created_at",
+      "id, order_code, company_name, manager_name, category, product_name, contract_start, contract_end, total_amount, status, created_at",
       { count: "exact" }
     )
     .order("created_at", { ascending: false })
@@ -73,6 +73,7 @@ export default async function AdminOrdersPage({ searchParams }: Props) {
           <TableHeader>
             <TableRow>
               <TableHead className="w-14">번호</TableHead>
+              <TableHead>결제코드</TableHead>
               <TableHead>회사명</TableHead>
               <TableHead>관리자명</TableHead>
               <TableHead>구분</TableHead>
@@ -88,6 +89,7 @@ export default async function AdminOrdersPage({ searchParams }: Props) {
             {(orders ?? []).map((o, index) => (
               <TableRow key={o.id}>
                 <TableCell className="text-muted-foreground">{totalCount - offset - index}</TableCell>
+                <TableCell className="text-muted-foreground font-mono text-xs">{o.order_code}</TableCell>
                 <TableCell className="font-medium">{o.company_name ?? "-"}</TableCell>
                 <TableCell className="text-muted-foreground">{o.manager_name ?? "-"}</TableCell>
                 <TableCell className="text-muted-foreground">{o.category}</TableCell>
@@ -124,7 +126,7 @@ export default async function AdminOrdersPage({ searchParams }: Props) {
 
             {orders && orders.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} className="text-center text-muted-foreground py-10">
+                <TableCell colSpan={11} className="text-center text-muted-foreground py-10">
                   등록된 결제가 없습니다.
                 </TableCell>
               </TableRow>
