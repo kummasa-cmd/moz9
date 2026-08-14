@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Check, ExternalLink, Globe, Mail, Star } from "lucide-react";
+import { ArrowRight, Check, Globe, Mail, Star } from "lucide-react";
+import { DomainChecker } from "@/components/domain-checker";
 
 export const metadata: Metadata = {
   title: "상품소개 | 모즈나인",
@@ -322,23 +323,11 @@ export default function GoodsPage() {
               <Globe size={18} />
             </span>
             <h3 className="font-semibold text-foreground mb-2">1. 도메인 구매 및 관리</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-1">
-              별도 진행 · 도메인 가격에 따라 비용이 결정됩니다. (VAT 별도)
-            </p>
             <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-              원하는 도메인의 구매 가능 여부와 가격은 후이즈(WHOIS) 같은 도메인 등록 대행업체
-              사이트에서 직접 확인할 수 있어요. 도메인 검색창에 원하는 주소를 입력하면 등록
-              가능 여부와 연간 비용이 바로 표시되며, 해당 화면을 캡처해 상담 시 함께 보내주시면
-              가장 빠르게 안내해 드립니다.
+              별도 진행 · 도메인 가격에 따라 비용이 결정됩니다. (VAT 별도) 아래에서 원하는
+              .com / .kr / .co.kr 도메인의 사용 가능 여부를 바로 확인해 보세요.
             </p>
-            <a
-              href="https://domain.whois.co.kr/regist/dom.php"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-auto inline-flex items-center justify-center gap-2 w-full rounded-md border border-border px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
-            >
-              후이즈에서 도메인 확인하기 <ExternalLink size={14} />
-            </a>
+            <DomainChecker />
           </div>
 
           {/* Newsletter */}
