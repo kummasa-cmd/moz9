@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowRight, BookOpen } from "lucide-react";
+import { ArrowRight, BookOpen, ExternalLink } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -41,7 +41,7 @@ const career: CareerEntry[] = [
     period: "2024 –",
     role: "작가 · 크리에이터",
     bullets: [
-      "자기계발·에세이 분야 전자책 11권 출간",
+      "자기계발·에세이 분야 전자책 12권 출간",
       "전자책 코칭으로 70명 이상의 베스트셀러 작가 배출",
       "종이책 《루틴의 설계》 출간 (모모북스, 2025.08)",
       "모즈나인 설립 — 작가·1인 크리에이터 디지털 운영 파트너",
@@ -51,20 +51,87 @@ const career: CareerEntry[] = [
 
 const books = {
   paperback: [
-    { title: "루틴의 설계", publisher: "모모북스", date: "2025.08", genre: "자기계발" },
+    {
+      title: "루틴의 설계",
+      publisher: "모모북스",
+      date: "2025.08",
+      genre: "자기계발",
+      link: "https://product.kyobobook.co.kr/detail/S000217241447",
+    },
   ],
   ebook: [
-    { title: "3달만에 0에서 5천 인플루언서 블로거가 되는 법", date: "2024.03", genre: "자기계발" },
-    { title: "평범한 블로거를 3달 만에 베스트셀러작가로 만든 비결", date: "2024.03", genre: "자기계발" },
-    { title: "B형 남자", date: "2024.05", genre: "에세이" },
-    { title: "극복하지 못해도 괜찮아", date: "2024.07", genre: "자기계발" },
-    { title: "50대에 시작하는 SNS", date: "2024.09", genre: "자기계발" },
-    { title: "블로그 1년, 두근거리는 인생 2막의 시작", date: "2024.12", genre: "자기계발" },
-    { title: "글쓰기 초보를 위한 SNS 글감 찾기", date: "2025.02", genre: "자기계발" },
-    { title: "한 번뿐인 인생을 깨우는 5가지 키워드", date: "2025.09", genre: "자기계발" },
-    { title: "꾸준함 관리 비법", date: "2025.12", genre: "자기계발" },
-    { title: "코드를 짜던 사람이 삶을 기록하기 시작했다", date: "2026.01", genre: "에세이" },
-    { title: "오십, 내 인생은 아직 끝나지 않았다", date: "2026.05", genre: "자기계발" },
+    {
+      title: "3달만에 0에서 5천 인플루언서 블로거가 되는 법",
+      date: "2024.03",
+      genre: "자기계발",
+      link: "https://www.yes24.com/Product/Goods/125234464",
+    },
+    {
+      title: "평범한 블로거를 3달 만에 베스트셀러작가로 만든 비결",
+      date: "2024.03",
+      genre: "자기계발",
+      link: "https://www.yes24.com/Product/Goods/125713878",
+    },
+    {
+      title: "B형 남자",
+      date: "2024.05",
+      genre: "에세이",
+      link: "https://www.yes24.com/Product/Goods/126468407",
+    },
+    {
+      title: "극복하지 못해도 괜찮아",
+      date: "2024.07",
+      genre: "자기계발",
+      link: "https://www.yes24.com/Product/Goods/128739566",
+    },
+    {
+      title: "50대에 시작하는 SNS",
+      date: "2024.09",
+      genre: "자기계발",
+      link: "https://www.yes24.com/Product/Goods/133869955",
+    },
+    {
+      title: "블로그 1년, 두근거리는 인생 2막의 시작",
+      date: "2024.12",
+      genre: "자기계발",
+      link: "https://www.yes24.com/Product/Goods/140244236",
+    },
+    {
+      title: "글쓰기 초보를 위한 SNS 글감 찾기",
+      date: "2025.02",
+      genre: "자기계발",
+      link: "https://www.yes24.com/Product/Goods/142703098",
+    },
+    {
+      title: "한 번뿐인 인생을 깨우는 5가지 키워드",
+      date: "2025.09",
+      genre: "자기계발",
+      link: "https://www.yes24.com/product/goods/155075285",
+    },
+    {
+      title: "꾸준함 관리 비법",
+      date: "2025.12",
+      genre: "자기계발",
+      link: "https://www.yes24.com/product/goods/167782427",
+    },
+    {
+      title: "코드를 짜던 사람이 삶을 기록하기 시작했다",
+      date: "2026.01",
+      genre: "에세이",
+      link: "https://www.yes24.com/product/goods/155075285",
+    },
+    {
+      title: "오십, 내 인생은 아직 끝나지 않았다",
+      date: "2026.05",
+      genre: "자기계발",
+      link: "https://www.yes24.com/product/goods/177256726",
+    },
+    {
+      title: "매일 한 줄이 인생을 바꾼다",
+      date: "2026.08",
+      genre: "자기계발",
+      link: "https://www.yes24.com/product/goods/194645680",
+    },
   ],
 };
 
@@ -192,12 +259,18 @@ export default function AboutPage() {
             <p className="text-sm font-semibold text-foreground mb-3">종이책</p>
             <div className="space-y-2">
               {books.paperback.map((b) => (
-                <div
+                <a
                   key={b.title}
-                  className="flex items-center justify-between p-4 rounded-lg border border-primary/20 bg-primary/5"
+                  href={b.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-4 rounded-lg border border-primary/20 bg-primary/5 hover:border-primary/40 transition-colors"
                 >
                   <div>
-                    <p className="font-medium text-foreground text-sm">《{b.title}》</p>
+                    <p className="font-medium text-foreground text-sm flex items-center gap-1.5">
+                      《{b.title}》
+                      <ExternalLink size={12} className="text-muted-foreground" />
+                    </p>
                     <p className="text-xs text-muted-foreground mt-0.5">{b.publisher}</p>
                   </div>
                   <div className="text-right">
@@ -206,7 +279,7 @@ export default function AboutPage() {
                     </span>
                     <p className="text-xs text-muted-foreground mt-1">{b.date}</p>
                   </div>
-                </div>
+                </a>
               ))}
             </div>
           </div>
@@ -216,15 +289,21 @@ export default function AboutPage() {
             <p className="text-sm font-semibold text-foreground mb-3">전자책 ({books.ebook.length}권)</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {books.ebook.map((b, i) => (
-                <div
+                <a
                   key={b.title}
-                  className="flex items-start justify-between p-4 rounded-lg border border-border bg-white"
+                  href={b.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start justify-between p-4 rounded-lg border border-border bg-white hover:border-primary/40 transition-colors"
                 >
                   <div className="flex items-start gap-3">
                     <span className="text-xs text-muted-foreground font-medium w-5 flex-shrink-0 mt-0.5">
                       {String(i + 1).padStart(2, "0")}
                     </span>
-                    <p className="text-sm text-foreground leading-snug">《{b.title}》</p>
+                    <p className="text-sm text-foreground leading-snug flex items-start gap-1.5">
+                      《{b.title}》
+                      <ExternalLink size={12} className="text-muted-foreground flex-shrink-0 mt-0.5" />
+                    </p>
                   </div>
                   <div className="text-right flex-shrink-0 ml-3">
                     <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
@@ -232,7 +311,7 @@ export default function AboutPage() {
                     </span>
                     <p className="text-xs text-muted-foreground mt-1">{b.date}</p>
                   </div>
-                </div>
+                </a>
               ))}
             </div>
           </div>
