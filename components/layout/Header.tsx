@@ -36,12 +36,12 @@ export default function Header({ user }: HeaderProps) {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center" aria-label="모즈나인 홈으로 이동">
           <Image
-            src="/logo/moznine-logo-full.svg"
+            src="/logo/moznine-symbol.svg"
             alt="moznine"
-            width={160}
-            height={80}
+            width={200}
+            height={120}
             priority
-            className="h-[47px] w-auto sm:h-[52px]"
+            className="h-12 w-auto sm:h-14"
           />
         </Link>
 

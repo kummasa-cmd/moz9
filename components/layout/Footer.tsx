@@ -15,11 +15,11 @@ export default function Footer() {
         <div className="flex flex-col md:flex-row justify-between gap-6">
           <div className="space-y-1">
             <Image
-              src="/logo/moznine-logo-full.svg"
+              src="/logo/moznine-symbol.svg"
               alt="moznine"
-              width={160}
-              height={80}
-              className="h-[42px] w-auto mb-1"
+              width={200}
+              height={120}
+              className="h-12 w-auto mb-1"
             />
             <p className="text-sm text-muted-foreground">
               작가·1인 크리에이터를 위한 디지털 운영 파트너
