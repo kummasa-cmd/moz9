@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
-import { MessageSquare, Clock, Lock, ChevronRight, Pencil } from "lucide-react";
+import { MessageSquare, Clock, Lock, ChevronRight, Pencil, Info } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -113,9 +113,16 @@ export default async function CommunityPage() {
 
       {columnBoards.length > 0 && (
         <div className="mb-12">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
             <h2 className="text-lg font-bold text-foreground">컬럼 · 연재 · 정보 · 광고</h2>
             <span className="text-xs text-muted-foreground">로그인 회원 전용 · 글쓰기는 컬럼 회원만 가능</span>
+            <Link
+              href="/community/column-guide"
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary border border-primary/30 rounded-full px-2.5 py-1 hover:bg-primary/10 transition-colors"
+            >
+              <Info size={12} />
+              컬럼회원 안내
+            </Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {columnBoards.map((board) => (
