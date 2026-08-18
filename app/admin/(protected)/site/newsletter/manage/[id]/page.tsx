@@ -10,6 +10,7 @@ import { ImageUpload } from "@/components/admin/newsletter/ImageUpload";
 import { BlockEditor } from "@/components/admin/newsletter/BlockEditor";
 import { CampaignSection } from "@/components/admin/newsletter/CampaignSection";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getColumnBoardPosts } from "@/lib/newsletter/queries";
 import { saveNewsletterCampaign } from "../actions";
 import type { ContentBlock } from "@/lib/newsletter/blocks/types";
 
@@ -30,7 +31,7 @@ export default async function AdminNewsletterManageEditPage({ params, searchPara
   const { error } = await searchParams;
 
   const supabase = createAdminClient();
-  const [{ data: newsletter }, { data: banners }, { data: campaign }] = await Promise.all([
+  const [{ data: newsletter }, { data: banners }, { data: campaign }, boardPosts] = await Promise.all([
     supabase
       .from("newsletters")
       .select("id, title, slug, subject, preheader, thumbnail_url, status, blocks")
@@ -50,6 +51,7 @@ export default async function AdminNewsletterManageEditPage({ params, searchPara
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    getColumnBoardPosts(),
   ]);
 
   if (!newsletter) notFound();
@@ -136,7 +138,12 @@ export default async function AdminNewsletterManageEditPage({ params, searchPara
 
         <div>
           <Label className="mb-3 block text-sm font-semibold text-foreground">콘텐츠 블록</Label>
-          <BlockEditor name="blocks" defaultValue={blocks} bannerOptions={banners ?? []} />
+          <BlockEditor
+            name="blocks"
+            defaultValue={blocks}
+            bannerOptions={banners ?? []}
+            boardPosts={boardPosts}
+          />
         </div>
 
         <CampaignSection

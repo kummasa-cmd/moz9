@@ -6,6 +6,7 @@ import { getAdBannersByIds } from "@/lib/newsletter/queries";
 import { newsletterConfig } from "@/lib/newsletter/config";
 import { NewsletterBlocks } from "@/lib/newsletter/blocks/web-renderer";
 import { renderBlocksToHtml } from "@/lib/newsletter/blocks/email-renderer";
+import { buildPreviewEmailHtml } from "@/lib/newsletter/email";
 import { getAdBannerIds, type ContentBlock } from "@/lib/newsletter/blocks/types";
 
 type Props = {
@@ -18,7 +19,7 @@ export default async function AdminNewsletterPreviewPage({ params }: Props) {
   const supabase = createAdminClient();
   const { data: newsletter } = await supabase
     .from("newsletters")
-    .select("id, title, subject, blocks")
+    .select("id, title, slug, subject, blocks")
     .eq("id", id)
     .maybeSingle();
 
@@ -28,7 +29,7 @@ export default async function AdminNewsletterPreviewPage({ params }: Props) {
   const banners = await getAdBannersByIds(getAdBannerIds(blocks));
 
   const emailBody = renderBlocksToHtml(blocks, { brandColor: newsletterConfig.brandColor, banners });
-  const emailHtml = `<!doctype html><html><head><meta charset="utf-8" /></head><body style="margin:0;padding:24px;background:#f4f4f5;"><div style="max-width:600px;margin:0 auto;background:#ffffff;padding:32px;border-radius:12px;">${emailBody}</div></body></html>`;
+  const emailHtml = buildPreviewEmailHtml(emailBody, { newsletterId: newsletter.id, slug: newsletter.slug });
 
   return (
     <div>

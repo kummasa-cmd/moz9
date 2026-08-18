@@ -28,7 +28,16 @@ export type Newsletter = {
   status: NewsletterStatus;
   blocks: ContentBlock[];
   viewCount: number;
+  likeCount: number;
+  dislikeCount: number;
   publishedAt: string | null;
+  createdAt: string;
+};
+
+export type NewsletterTemplate = {
+  id: string;
+  name: string;
+  blocks: ContentBlock[];
   createdAt: string;
 };
 

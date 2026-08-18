@@ -27,6 +27,7 @@ type Props = {
   boardId: string;
   posts: AdminPostRow[];
   useCategory: boolean;
+  showNewsletterUsage?: boolean;
   page: number;
   limit: number;
   totalPages: number;
@@ -38,6 +39,7 @@ export default function PostsTable({
   boardId,
   posts,
   useCategory,
+  showNewsletterUsage = false,
   page,
   limit,
   totalPages,
@@ -50,7 +52,7 @@ export default function PostsTable({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
 
-  const colCount = (useCategory ? 8 : 7) + 1;
+  const colCount = (useCategory ? 8 : 7) + 1 + (showNewsletterUsage ? 2 : 0);
   const allSelected = posts.length > 0 && posts.every((p) => selected.has(p.id));
 
   function toggleAll() {
@@ -119,6 +121,12 @@ export default function PostsTable({
               <TableHead className="w-24">작성자</TableHead>
               <TableHead className="w-28">등록일</TableHead>
               <TableHead className="w-20 text-center">조회수</TableHead>
+              {showNewsletterUsage && (
+                <>
+                  <TableHead className="w-24 text-center">뉴스레터 사용횟수</TableHead>
+                  <TableHead className="w-28 text-center">최종 사용일</TableHead>
+                </>
+              )}
               <TableHead className="w-20">상태</TableHead>
               <TableHead className="text-right w-20">관리</TableHead>
             </TableRow>
@@ -170,6 +178,20 @@ export default function PostsTable({
                 <TableCell className="text-center text-muted-foreground tabular-nums">
                   {p.viewCount.toLocaleString()}
                 </TableCell>
+                {showNewsletterUsage && (
+                  <>
+                    <TableCell className="text-center text-muted-foreground tabular-nums">
+                      {p.newsletterUseCount.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-center text-muted-foreground text-sm">
+                      {p.newsletterLastUsedAt ? (
+                        new Date(p.newsletterLastUsedAt).toLocaleDateString("ko-KR")
+                      ) : (
+                        <span className="text-muted-foreground/40">-</span>
+                      )}
+                    </TableCell>
+                  </>
+                )}
                 <TableCell>
                   <Badge variant={p.status === "게시중" ? "default" : "secondary"}>
                     {p.status}

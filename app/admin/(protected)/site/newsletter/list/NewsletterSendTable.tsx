@@ -140,6 +140,8 @@ export default function NewsletterSendTable({
               <TableHead>발송 상태</TableHead>
               <TableHead>발송수</TableHead>
               <TableHead>조회수</TableHead>
+              <TableHead>좋아요</TableHead>
+              <TableHead>아쉬워요</TableHead>
               <TableHead className="text-right">관리</TableHead>
             </TableRow>
           </TableHeader>
@@ -180,6 +182,8 @@ export default function NewsletterSendTable({
                     : "-"}
                 </TableCell>
                 <TableCell className="text-muted-foreground">{n.viewCount.toLocaleString()}</TableCell>
+                <TableCell className="text-muted-foreground">👍 {n.likeCount.toLocaleString()}</TableCell>
+                <TableCell className="text-muted-foreground">👎 {n.dislikeCount.toLocaleString()}</TableCell>
                 <TableCell className="text-right">
                   <div className="inline-flex items-center gap-3">
                     {n.campaign?.status === "SCHEDULED" && (
@@ -246,7 +250,7 @@ export default function NewsletterSendTable({
 
             {newsletters.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-muted-foreground py-10">
+                <TableCell colSpan={11} className="text-center text-muted-foreground py-10">
                   등록된 뉴스레터가 없습니다.
                 </TableCell>
               </TableRow>

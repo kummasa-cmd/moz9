@@ -1,9 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ContentBlock } from "./blocks/types";
-import type { AdBanner, Newsletter, Subscriber, SubscriberSource } from "./types";
+import type { AdBanner, Newsletter, NewsletterTemplate, Subscriber, SubscriberSource } from "./types";
 
 const NEWSLETTER_COLUMNS =
-  "id, title, slug, subject, preheader, thumbnail_url, status, blocks, view_count, published_at, created_at";
+  "id, title, slug, subject, preheader, thumbnail_url, status, blocks, view_count, like_count, dislike_count, published_at, created_at";
 
 const AD_BANNER_COLUMNS = "id, name, image_url, link_url, position, start_date, end_date, is_active";
 
@@ -21,7 +21,18 @@ function mapNewsletter(row: Record<string, unknown>): Newsletter {
     status: row.status as Newsletter["status"],
     blocks: (row.blocks as ContentBlock[] | null) ?? [],
     viewCount: (row.view_count as number | null) ?? 0,
+    likeCount: (row.like_count as number | null) ?? 0,
+    dislikeCount: (row.dislike_count as number | null) ?? 0,
     publishedAt: (row.published_at as string | null) ?? null,
+    createdAt: row.created_at as string,
+  };
+}
+
+function mapNewsletterTemplate(row: Record<string, unknown>): NewsletterTemplate {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    blocks: (row.blocks as ContentBlock[] | null) ?? [],
     createdAt: row.created_at as string,
   };
 }
@@ -201,4 +212,99 @@ export async function getTargetSubscribers(campaign: {
 
   const { data } = await query;
   return (data ?? []).map(mapSubscriber);
+}
+
+const COLUMN_BOARD_SLUGS = ["column", "series", "info", "ad"];
+
+export type BoardPostOption = {
+  id: string;
+  title: string;
+  content: string;
+  boardName: string;
+  newsletterUseCount: number;
+  newsletterLastUsedAt: string | null;
+  createdAt: string;
+  // Set only for posts written by a logged-in member (not an admin) — used to
+  // prefix an author_info block when importing the post into a newsletter.
+  author: { name: string; avatarUrl: string | null } | null;
+};
+
+export async function getColumnBoardPosts(): Promise<BoardPostOption[]> {
+  const db = createAdminClient();
+
+  const { data: boards } = await db.from("boards").select("id, name, slug").in("slug", COLUMN_BOARD_SLUGS);
+  if (!boards || boards.length === 0) return [];
+
+  const boardNameById = new Map(boards.map((b) => [b.id as string, b.name as string]));
+
+  const { data: posts } = await db
+    .from("board_posts")
+    .select(
+      "id, title, content, board_id, user_id, newsletter_use_count, newsletter_last_used_at, created_at",
+    )
+    .in(
+      "board_id",
+      boards.map((b) => b.id),
+    )
+    .eq("status", "게시중")
+    .order("newsletter_use_count", { ascending: true })
+    .order("created_at", { ascending: false });
+
+  const memberUserIds = [...new Set((posts ?? []).map((p) => p.user_id).filter((id): id is string => !!id))];
+
+  const memberByUserId = new Map<string, { nickname: string | null; avatarUrl: string | null }>();
+  if (memberUserIds.length > 0) {
+    const { data: members } = await db
+      .from("members")
+      .select("user_id, nickname, avatar_url")
+      .in("user_id", memberUserIds);
+    for (const m of members ?? []) {
+      memberByUserId.set(m.user_id as string, {
+        nickname: (m.nickname as string | null) ?? null,
+        avatarUrl: (m.avatar_url as string | null) ?? null,
+      });
+    }
+  }
+
+  return (posts ?? []).map((p) => {
+    const userId = p.user_id as string | null;
+    const member = userId ? memberByUserId.get(userId) : undefined;
+
+    return {
+      id: p.id as string,
+      title: p.title as string,
+      content: p.content as string,
+      boardName: boardNameById.get(p.board_id as string) ?? "",
+      newsletterUseCount: (p.newsletter_use_count as number | null) ?? 0,
+      newsletterLastUsedAt: (p.newsletter_last_used_at as string | null) ?? null,
+      createdAt: p.created_at as string,
+      author: userId
+        ? { name: member?.nickname ?? "익명", avatarUrl: member?.avatarUrl ?? null }
+        : null,
+    };
+  });
+}
+
+export async function recordBoardPostNewsletterUsage(postIds: string[]): Promise<void> {
+  if (postIds.length === 0) return;
+  const db = createAdminClient();
+  await db.rpc("increment_board_post_newsletter_usage", { p_ids: postIds });
+}
+
+export async function recordNewsletterFeedback(
+  newsletterId: string,
+  type: "like" | "dislike",
+): Promise<void> {
+  const db = createAdminClient();
+  await db.rpc("increment_newsletter_feedback", { p_newsletter_id: newsletterId, p_type: type });
+}
+
+export async function getNewsletterTemplates(): Promise<NewsletterTemplate[]> {
+  const db = createAdminClient();
+  const { data } = await db
+    .from("newsletter_templates")
+    .select("id, name, blocks, created_at")
+    .order("created_at", { ascending: false });
+
+  return (data ?? []).map(mapNewsletterTemplate);
 }

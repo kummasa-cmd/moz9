@@ -57,6 +57,20 @@ function DividerBlockView() {
   return <hr className="border-t border-border" />;
 }
 
+function AuthorInfoBlockView({ block }: { block: Extract<ContentBlock, { type: "author_info" }> }) {
+  return (
+    <div className="flex items-center gap-3">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={block.content.avatarUrl || "/images/avatar-placeholder.svg"}
+        alt={block.content.name}
+        className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+      />
+      <span className="text-sm font-semibold text-foreground">{block.content.name}</span>
+    </div>
+  );
+}
+
 function AdBannerBlockView({ banner }: { banner: AdBanner | undefined }) {
   if (!banner) return null;
   return (
@@ -90,6 +104,8 @@ export function NewsletterBlocks({
             return <DividerBlockView key={block.id} />;
           case "ad_banner":
             return <AdBannerBlockView key={block.id} banner={banners[block.content.bannerId]} />;
+          case "author_info":
+            return <AuthorInfoBlockView key={block.id} block={block} />;
           default:
             return assertNever(block);
         }

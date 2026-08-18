@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { processCampaign } from "@/lib/newsletter/scheduler";
-import type { ContentBlock } from "@/lib/newsletter/blocks/types";
+import { recordBoardPostNewsletterUsage } from "@/lib/newsletter/queries";
+import { getSourcePostIds, type ContentBlock } from "@/lib/newsletter/blocks/types";
 
 function parseBlocks(raw: FormDataEntryValue | null): ContentBlock[] {
   if (!raw) return [];
@@ -49,6 +50,7 @@ export async function saveNewsletterCampaign(id: string | null, formData: FormDa
   if (slugOwner) slug = `${slug}-${Date.now().toString(36)}`;
 
   let newsletterId = id;
+  let isFirstPublish = false;
 
   if (id) {
     const { data: current } = await supabase
@@ -57,10 +59,8 @@ export async function saveNewsletterCampaign(id: string | null, formData: FormDa
       .eq("id", id)
       .maybeSingle();
 
-    const published_at =
-      status === "PUBLISHED" && !current?.published_at
-        ? new Date().toISOString()
-        : (current?.published_at ?? null);
+    isFirstPublish = status === "PUBLISHED" && !current?.published_at;
+    const published_at = isFirstPublish ? new Date().toISOString() : (current?.published_at ?? null);
 
     const { error } = await supabase
       .from("newsletters")
@@ -71,7 +71,8 @@ export async function saveNewsletterCampaign(id: string | null, formData: FormDa
       redirect(`${editBase}?error=${encodeURIComponent(error.message)}`);
     }
   } else {
-    const published_at = status === "PUBLISHED" ? new Date().toISOString() : null;
+    isFirstPublish = status === "PUBLISHED";
+    const published_at = isFirstPublish ? new Date().toISOString() : null;
 
     const { data: inserted, error } = await supabase
       .from("newsletters")
@@ -84,6 +85,10 @@ export async function saveNewsletterCampaign(id: string | null, formData: FormDa
     }
 
     newsletterId = inserted!.id;
+  }
+
+  if (isFirstPublish) {
+    await recordBoardPostNewsletterUsage(getSourcePostIds(blocks));
   }
 
   const afterSaveEditUrl = `/admin/site/newsletter/manage/${newsletterId}`;

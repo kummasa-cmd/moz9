@@ -34,6 +34,8 @@ export type NewsletterSendRow = {
   slug: string;
   status: string;
   viewCount: number;
+  likeCount: number;
+  dislikeCount: number;
   publishedAt: string | null;
   createdAt: string;
   campaign: CampaignSummary | null;

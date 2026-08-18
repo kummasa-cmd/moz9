@@ -10,9 +10,11 @@ import {
 } from "@/lib/newsletter/queries";
 import { getAdBannerIds } from "@/lib/newsletter/blocks/types";
 import { NewsletterBlocks } from "@/lib/newsletter/blocks/web-renderer";
+import { NewsletterFooterActions } from "@/components/newsletter/NewsletterFooterActions";
 
 type Props = {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ feedback?: string }>;
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -26,8 +28,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function NewsletterDetailPage({ params }: Props) {
+export default async function NewsletterDetailPage({ params, searchParams }: Props) {
   const { slug } = await params;
+  const { feedback } = await searchParams;
   const newsletter = await getPublishedNewsletterBySlug(slug);
   if (!newsletter) notFound();
 
@@ -54,6 +57,17 @@ export default async function NewsletterDetailPage({ params }: Props) {
       </p>
 
       <NewsletterBlocks blocks={newsletter.blocks} banners={banners} />
+
+      {(feedback === "like" || feedback === "dislike") && (
+        <p className="mt-8 text-center text-sm text-primary">소중한 의견 감사합니다.</p>
+      )}
+
+      <NewsletterFooterActions
+        newsletterId={newsletter.id}
+        slug={newsletter.slug}
+        likeCount={newsletter.likeCount}
+        dislikeCount={newsletter.dislikeCount}
+      />
     </article>
   );
 }

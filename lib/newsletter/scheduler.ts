@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAdBannerIds, type ContentBlock } from "./blocks/types";
+import { getAdBannerIds, getSourcePostIds, type ContentBlock } from "./blocks/types";
 import { renderBlocksToHtml } from "./blocks/email-renderer";
-import { getAdBannersByIds, getTargetSubscribers } from "./queries";
+import { getAdBannersByIds, getTargetSubscribers, recordBoardPostNewsletterUsage } from "./queries";
 import { newsletterConfig } from "./config";
 import { buildEmailTemplate, chunk, getResendClient, personalizeEmail } from "./email";
 
@@ -34,7 +34,7 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
 
   const { data: newsletter } = await db
     .from("newsletters")
-    .select("id, subject, blocks")
+    .select("id, slug, subject, blocks")
     .eq("id", campaign.newsletter_id)
     .maybeSingle();
 
@@ -71,7 +71,10 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
   const blocks = (newsletter.blocks as ContentBlock[] | null) ?? [];
   const banners = await getAdBannersByIds(getAdBannerIds(blocks));
   const bodyHtml = renderBlocksToHtml(blocks, { brandColor: newsletterConfig.brandColor, banners });
-  const templateHtml = buildEmailTemplate(bodyHtml);
+  const templateHtml = buildEmailTemplate(bodyHtml, {
+    newsletterId: newsletter.id,
+    slug: newsletter.slug,
+  });
 
   const deliveryRows = subscribers.map((s) => ({
     campaign_id: campaignId,
@@ -147,6 +150,10 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
       total_sent: totalSent,
     })
     .eq("id", campaignId);
+
+  if (totalSent > 0) {
+    await recordBoardPostNewsletterUsage(getSourcePostIds(blocks));
+  }
 
   if (allFailed) {
     return { ok: false, error: "이메일 발송에 모두 실패했습니다. Resend 발신 도메인 인증 상태를 확인해 주세요." };

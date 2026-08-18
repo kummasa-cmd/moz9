@@ -27,12 +27,17 @@ export default async function AdminBoardPostsPage({ params, searchParams }: Prop
   const supabase = createAdminClient();
 
   const [{ data: board }, { data: posts, error, count }, { data: categories }] = await Promise.all([
-    supabase.from("boards").select("id, name, use_category, use_comment").eq("id", id).maybeSingle(),
+    supabase
+      .from("boards")
+      .select("id, name, use_category, use_comment, column_only")
+      .eq("id", id)
+      .maybeSingle(),
     supabase
       .from("board_posts")
-      .select("id, title, status, created_at, category_id, is_notice, author, view_count", {
-        count: "exact",
-      })
+      .select(
+        "id, title, status, created_at, category_id, is_notice, author, view_count, newsletter_use_count, newsletter_last_used_at",
+        { count: "exact" },
+      )
       .eq("board_id", id)
       .order("is_notice", { ascending: false })
       .order("created_at", { ascending: false })
@@ -69,6 +74,8 @@ export default async function AdminBoardPostsPage({ params, searchParams }: Prop
     isNotice: p.is_notice,
     categoryName: p.category_id ? categoryMap.get(p.category_id) ?? null : null,
     commentCount: commentCountMap.get(p.id) ?? 0,
+    newsletterUseCount: p.newsletter_use_count ?? 0,
+    newsletterLastUsedAt: p.newsletter_last_used_at,
   }));
 
   return (
@@ -101,6 +108,7 @@ export default async function AdminBoardPostsPage({ params, searchParams }: Prop
         boardId={id}
         posts={rows}
         useCategory={board.use_category}
+        showNewsletterUsage={board.column_only}
         page={page}
         limit={limit}
         totalPages={totalPages}

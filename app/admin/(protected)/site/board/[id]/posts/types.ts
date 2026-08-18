@@ -11,4 +11,6 @@ export type AdminPostRow = {
   isNotice: boolean;
   categoryName: string | null;
   commentCount: number;
+  newsletterUseCount: number;
+  newsletterLastUsedAt: string | null;
 };

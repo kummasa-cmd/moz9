@@ -1,3 +1,4 @@
+import { newsletterConfig } from "../config";
 import type { AdBanner } from "../types";
 import { sortBlocks, type ContentBlock } from "./types";
 
@@ -44,6 +45,14 @@ function renderDivider(): string {
   return `<hr style="border:none;border-top:1px solid ${MUTED_BORDER};margin:24px 0;" />`;
 }
 
+function renderAuthorInfo(block: Extract<ContentBlock, { type: "author_info" }>): string {
+  const avatarSrc = block.content.avatarUrl || `${newsletterConfig.siteUrl}/images/avatar-placeholder.svg`;
+  return `<div style="margin:0 0 16px;">
+    <img src="${escapeHtml(avatarSrc)}" alt="${escapeHtml(block.content.name)}" width="40" height="40" style="width:40px;height:40px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:10px;" />
+    <span style="font-family:${FONT_STACK};font-size:14px;font-weight:600;color:${TEXT_COLOR};vertical-align:middle;">${escapeHtml(block.content.name)}</span>
+  </div>`;
+}
+
 function renderAdBanner(banner: AdBanner | undefined): string {
   if (!banner) return "";
   return `<a href="${escapeHtml(banner.linkUrl)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(banner.imageUrl)}" alt="${escapeHtml(banner.name)}" style="max-width:100%;display:block;margin:0 0 16px;border-radius:8px;" /></a>`;
@@ -68,6 +77,8 @@ export function renderBlocksToHtml(
           return renderDivider();
         case "ad_banner":
           return renderAdBanner(options.banners[block.content.bannerId]);
+        case "author_info":
+          return renderAuthorInfo(block);
         default:
           return assertNever(block);
       }

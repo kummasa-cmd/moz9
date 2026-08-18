@@ -9,6 +9,7 @@ import { ImageUpload } from "@/components/admin/newsletter/ImageUpload";
 import { BlockEditor } from "@/components/admin/newsletter/BlockEditor";
 import { CampaignSection } from "@/components/admin/newsletter/CampaignSection";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getColumnBoardPosts, getNewsletterTemplates } from "@/lib/newsletter/queries";
 import { saveNewsletterCampaign } from "./actions";
 
 type Props = {
@@ -19,11 +20,15 @@ export default async function AdminNewsletterManageNewPage({ searchParams }: Pro
   const { error } = await searchParams;
 
   const supabase = createAdminClient();
-  const { data: banners } = await supabase
-    .from("newsletter_ad_banners")
-    .select("id, name")
-    .eq("is_active", true)
-    .order("created_at", { ascending: false });
+  const [{ data: banners }, boardPosts, templates] = await Promise.all([
+    supabase
+      .from("newsletter_ad_banners")
+      .select("id, name")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false }),
+    getColumnBoardPosts(),
+    getNewsletterTemplates(),
+  ]);
 
   return (
     <div>
@@ -99,7 +104,14 @@ export default async function AdminNewsletterManageNewPage({ searchParams }: Pro
 
         <div>
           <Label className="mb-3 block text-sm font-semibold text-foreground">콘텐츠 블록</Label>
-          <BlockEditor name="blocks" defaultValue={[]} bannerOptions={banners ?? []} />
+          <BlockEditor
+            name="blocks"
+            defaultValue={[]}
+            bannerOptions={banners ?? []}
+            boardPosts={boardPosts}
+            templates={templates}
+            allowLoadTemplate
+          />
         </div>
 
         <CampaignSection />

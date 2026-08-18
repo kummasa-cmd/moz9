@@ -24,7 +24,9 @@ export default async function AdminNewsletterListPage({ searchParams }: Props) {
     count,
   } = await supabase
     .from("newsletters")
-    .select("id, title, slug, status, view_count, published_at, created_at", { count: "exact" })
+    .select("id, title, slug, status, view_count, like_count, dislike_count, published_at, created_at", {
+      count: "exact",
+    })
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -68,6 +70,8 @@ export default async function AdminNewsletterListPage({ searchParams }: Props) {
     slug: n.slug,
     status: n.status,
     viewCount: n.view_count ?? 0,
+    likeCount: n.like_count ?? 0,
+    dislikeCount: n.dislike_count ?? 0,
     publishedAt: n.published_at,
     createdAt: n.created_at,
     campaign: campaignByNewsletterId.get(n.id) ?? null,
