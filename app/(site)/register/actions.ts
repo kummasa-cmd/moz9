@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyAdminNewMemberSignup } from "@/lib/mail";
 
 export async function register(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
@@ -43,6 +44,10 @@ export async function register(formData: FormData) {
 
   if (insertError && !insertError.message.includes("duplicate")) {
     redirect(`/register?error=${encodeURIComponent(insertError.message)}`);
+  }
+
+  if (!insertError) {
+    await notifyAdminNewMemberSignup(admin, { name: nickname, nickname, email });
   }
 
   revalidatePath("/", "layout");

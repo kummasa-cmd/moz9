@@ -111,6 +111,28 @@ export async function notifyAdminNewSubmission(
   await sendMail({ to: companyEmail, subject: `[${opts.boardLabel}] ${opts.title}`, html });
 }
 
+// Sent to the company email when a new member signs up (register/actions.ts).
+export async function notifyAdminNewMemberSignup(
+  db: SupabaseClient,
+  opts: { name: string; nickname: string; email: string }
+): Promise<void> {
+  const companyEmail = await getCompanyEmail(db);
+  if (!companyEmail) return;
+
+  const html = renderNotificationEmail({
+    heading: "새 회원이 가입했습니다",
+    meta: [
+      { label: "이름", value: opts.name },
+      { label: "닉네임", value: opts.nickname },
+      { label: "이메일", value: opts.email },
+    ],
+    ctaPath: "/admin/members",
+    ctaLabel: "회원관리에서 확인하기",
+  });
+
+  await sendMail({ to: companyEmail, subject: `[신규 회원가입] ${opts.nickname} (${opts.email})`, html });
+}
+
 // Sent to the original author's email when an admin replies on one of the
 // three 상담관리 boards.
 export async function notifySubmitterReply(opts: {
