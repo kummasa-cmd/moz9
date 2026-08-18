@@ -13,18 +13,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getColumnBoardPosts } from "@/lib/newsletter/queries";
 import { saveNewsletterCampaign } from "../actions";
 import type { ContentBlock } from "@/lib/newsletter/blocks/types";
+import { utcIsoToKstDatetimeLocal } from "@/lib/newsletter/schedule-time";
 
 type Props = {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string }>;
 };
-
-function toDatetimeLocal(value: string | null): string {
-  if (!value) return "";
-  const date = new Date(value);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
 
 export default async function AdminNewsletterManageEditPage({ params, searchParams }: Props) {
   const { id } = await params;
@@ -151,7 +145,7 @@ export default async function AdminNewsletterManageEditPage({ params, searchPara
           defaultEnabled={!!campaignActive}
           defaultCampaignName={campaign?.name ?? ""}
           defaultSendType={campaign?.send_type ?? "SCHEDULED"}
-          defaultScheduledAt={toDatetimeLocal(campaign?.scheduled_at ?? null)}
+          defaultScheduledAt={utcIsoToKstDatetimeLocal(campaign?.scheduled_at ?? null)}
           defaultRecurringTime={campaign?.recurring_time ?? "09:00"}
           defaultRangeStart={campaign?.range_start ?? ""}
           defaultRangeEnd={campaign?.range_end ?? ""}

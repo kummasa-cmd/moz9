@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { processCampaign } from "@/lib/newsletter/scheduler";
 import { recordBoardPostNewsletterUsage } from "@/lib/newsletter/queries";
 import { getSourcePostIds, type ContentBlock } from "@/lib/newsletter/blocks/types";
+import { kstDatetimeLocalToUtcIso } from "@/lib/newsletter/schedule-time";
 
 function parseBlocks(raw: FormDataEntryValue | null): ContentBlock[] {
   if (!raw) return [];
@@ -96,7 +97,8 @@ export async function saveNewsletterCampaign(id: string | null, formData: FormDa
 
   if (enableCampaign) {
     const send_type = String(formData.get("send_type") ?? "SCHEDULED");
-    const scheduled_at = String(formData.get("scheduled_at") ?? "") || null;
+    const scheduledAtLocal = String(formData.get("scheduled_at") ?? "") || null;
+    const scheduled_at = scheduledAtLocal ? kstDatetimeLocalToUtcIso(scheduledAtLocal) : null;
     const recurring_time = String(formData.get("recurring_time") ?? "") || null;
     const range_start = String(formData.get("range_start") ?? "") || null;
     const range_end = String(formData.get("range_end") ?? "") || null;

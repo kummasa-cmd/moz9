@@ -38,7 +38,9 @@ function campaignVariant(status: string) {
 function scheduleSummary(c: CampaignSummary) {
   if (c.sendType === "IMMEDIATE") return "즉시 발송";
   if (c.sendType === "SCHEDULED") {
-    return c.scheduledAt ? new Date(c.scheduledAt).toLocaleString("ko-KR") : "-";
+    return c.scheduledAt
+      ? new Date(c.scheduledAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+      : "-";
   }
   if (c.sendType === "RECURRING") return `매일 ${c.recurringTime ?? ""}`;
   if (c.sendType === "RANGE") return `${c.rangeStart ?? "-"} ~ ${c.rangeEnd ?? "-"}`;
