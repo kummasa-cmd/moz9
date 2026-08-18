@@ -18,7 +18,8 @@ type Props = {
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params;
+  const { slug: rawSlug } = await params;
+  const slug = decodeURIComponent(rawSlug);
   const newsletter = await getPublishedNewsletterBySlug(slug);
   if (!newsletter) return { title: "뉴스레터 | 모즈나인" };
 
@@ -29,7 +30,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function NewsletterDetailPage({ params, searchParams }: Props) {
-  const { slug } = await params;
+  const { slug: rawSlug } = await params;
+  const slug = decodeURIComponent(rawSlug);
   const { feedback } = await searchParams;
   const newsletter = await getPublishedNewsletterBySlug(slug);
   if (!newsletter) notFound();
