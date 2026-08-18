@@ -56,6 +56,28 @@ function renderNotificationEmail(opts: NotificationEmailOptions): string {
 </html>`;
 }
 
+function renderWelcomeEmail(opts: { nickname: string }): string {
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;background:#f4f4f5;font-family:'Pretendard','Inter',-apple-system,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;background:#ffffff;padding:32px;border-radius:12px;">
+      <h1 style="margin:0 0 16px;font-size:20px;color:#1A1A2E;">${escapeHtml(opts.nickname)}님, 환영합니다! 🎉</h1>
+      <p style="margin:0 0 20px;font-size:14px;color:#1A1A2E;line-height:1.7;">
+        모즈나인 회원가입이 완료되었습니다.<br />
+        이제 커뮤니티 게시판 이용, 상담·문의 내역 확인 등 다양한 기능을 이용하실 수 있습니다.
+      </p>
+      <p style="margin-top:24px;">
+        <a href="${SITE_URL}/mypage" style="display:inline-block;background:#3B5BFF;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;">마이페이지 바로가기</a>
+      </p>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:32px 0 16px;" />
+      <p style="margin:0;font-size:12px;color:#6B7280;">
+        본 메일은 회원가입 시 자동으로 발송되는 안내 메일입니다.
+      </p>
+    </div>
+  </body>
+</html>`;
+}
+
 async function sendMail(opts: { to: string; subject: string; html: string }): Promise<void> {
   if (!RESEND_API_KEY || !SENDER_EMAIL) {
     console.warn("[mail] RESEND_API_KEY 또는 NEWSLETTER_SENDER_EMAIL이 설정되지 않아 메일 발송을 건너뜁니다.");
@@ -131,6 +153,14 @@ export async function notifyAdminNewMemberSignup(
   });
 
   await sendMail({ to: companyEmail, subject: `[신규 회원가입] ${opts.nickname} (${opts.email})`, html });
+}
+
+// Sent to the member's own email right after they complete /register.
+export async function sendMemberWelcomeEmail(opts: { toEmail: string; nickname: string }): Promise<void> {
+  if (!opts.toEmail) return;
+
+  const html = renderWelcomeEmail({ nickname: opts.nickname });
+  await sendMail({ to: opts.toEmail, subject: "모즈나인 회원가입을 축하합니다!", html });
 }
 
 // Sent to the original author's email when an admin replies on one of the

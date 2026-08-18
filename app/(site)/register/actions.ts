@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { notifyAdminNewMemberSignup } from "@/lib/mail";
+import { notifyAdminNewMemberSignup, sendMemberWelcomeEmail } from "@/lib/mail";
 
 export async function register(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
@@ -48,6 +48,7 @@ export async function register(formData: FormData) {
 
   if (!insertError) {
     await notifyAdminNewMemberSignup(admin, { name: nickname, nickname, email });
+    await sendMemberWelcomeEmail({ toEmail: email, nickname });
   }
 
   revalidatePath("/", "layout");
