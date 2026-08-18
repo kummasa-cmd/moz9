@@ -65,16 +65,53 @@ function mapSubscriber(row: Record<string, unknown>): Subscriber {
   };
 }
 
+// A newsletter can be status=PUBLISHED (web-visible) while its email campaign
+// is still SCHEDULED/SENDING and hasn't actually gone out yet. Hide those from
+// public listings until the first real send completes, so readers can't see
+// content before subscribers do. Newsletters with no campaign (pure web
+// posts) or a campaign that has sent at least once (including RECURRING/RANGE
+// campaigns cycling back to SCHEDULED for their next run) stay visible.
+async function filterOutUnsentScheduled(newsletters: Newsletter[]): Promise<Newsletter[]> {
+  if (newsletters.length === 0) return newsletters;
+
+  const db = createAdminClient();
+  const { data: campaigns } = await db
+    .from("newsletter_campaigns")
+    .select("newsletter_id, status, total_sent, created_at")
+    .in(
+      "newsletter_id",
+      newsletters.map((n) => n.id),
+    )
+    .order("created_at", { ascending: false });
+
+  const latestCampaignByNewsletterId = new Map<string, { status: string; totalSent: number }>();
+  for (const c of campaigns ?? []) {
+    const newsletterId = c.newsletter_id as string;
+    if (latestCampaignByNewsletterId.has(newsletterId)) continue;
+    latestCampaignByNewsletterId.set(newsletterId, {
+      status: c.status as string,
+      totalSent: (c.total_sent as number | null) ?? 0,
+    });
+  }
+
+  return newsletters.filter((n) => {
+    const campaign = latestCampaignByNewsletterId.get(n.id);
+    if (!campaign) return true;
+    const stillPending = campaign.status === "SCHEDULED" || campaign.status === "SENDING";
+    return !(stillPending && campaign.totalSent === 0);
+  });
+}
+
 export async function getPublishedNewsletters(limit = 20): Promise<Newsletter[]> {
   const db = createAdminClient();
   const { data } = await db
     .from("newsletters")
     .select(NEWSLETTER_COLUMNS)
     .eq("status", "PUBLISHED")
-    .order("published_at", { ascending: false })
-    .limit(limit);
+    .order("published_at", { ascending: false });
 
-  return (data ?? []).map(mapNewsletter);
+  const visible = await filterOutUnsentScheduled((data ?? []).map(mapNewsletter));
+  return visible.slice(0, limit);
 }
 
 export async function getPublishedNewsletterBySlug(slug: string): Promise<Newsletter | null> {
