@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { X, Import, Check } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormSelect } from "@/components/admin/FormSelect";
+import { PAGE_SIZE_OPTIONS } from "@/components/admin/pagination-constants";
 import type { BoardPostOption } from "@/lib/newsletter/queries";
 
 type Props = {
@@ -13,9 +14,14 @@ type Props = {
   onClose: () => void;
 };
 
+const STATUS_OPTIONS = ["전체", "게시중", "숨김"];
+
 export function BoardPostPicker({ posts, importedPostIds, onImport, onClose }: Props) {
   const [boardFilter, setBoardFilter] = useState("전체");
+  const [statusFilter, setStatusFilter] = useState("전체");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(PAGE_SIZE_OPTIONS[0]);
 
   const boardNames = useMemo(
     () => ["전체", ...Array.from(new Set(posts.map((p) => p.boardName)))],
@@ -23,8 +29,19 @@ export function BoardPostPicker({ posts, importedPostIds, onImport, onClose }: P
   );
 
   const filtered = useMemo(
-    () => (boardFilter === "전체" ? posts : posts.filter((p) => p.boardName === boardFilter)),
-    [posts, boardFilter],
+    () =>
+      posts
+        .filter((p) => boardFilter === "전체" || p.boardName === boardFilter)
+        .filter((p) => statusFilter === "전체" || p.status === statusFilter),
+    [posts, boardFilter, statusFilter],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / limit));
+  const currentPage = Math.min(page, totalPages);
+
+  const paged = useMemo(
+    () => filtered.slice((currentPage - 1) * limit, currentPage * limit),
+    [filtered, currentPage, limit],
   );
 
   function toggle(id: string) {
@@ -62,11 +79,32 @@ export function BoardPostPicker({ posts, importedPostIds, onImport, onClose }: P
           </button>
         </div>
 
-        <div className="px-5 py-3 border-b border-border">
-          <FormSelect value={boardFilter} onChange={(e) => setBoardFilter(e.target.value)} className="w-40">
+        <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+          <FormSelect
+            value={boardFilter}
+            onChange={(e) => {
+              setBoardFilter(e.target.value);
+              setPage(1);
+            }}
+            className="w-40"
+          >
             {boardNames.map((name) => (
               <option key={name} value={name}>
                 {name}
+              </option>
+            ))}
+          </FormSelect>
+          <FormSelect
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            className="w-32"
+          >
+            {STATUS_OPTIONS.map((status) => (
+              <option key={status} value={status}>
+                {status}
               </option>
             ))}
           </FormSelect>
@@ -76,7 +114,7 @@ export function BoardPostPicker({ posts, importedPostIds, onImport, onClose }: P
           {filtered.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-10">게시물이 없습니다.</p>
           )}
-          {filtered.map((post) => {
+          {paged.map((post) => {
             const alreadyImported = importedPostIds?.has(post.id) ?? false;
             return (
               <label
@@ -90,6 +128,11 @@ export function BoardPostPicker({ posts, importedPostIds, onImport, onClose }: P
                       <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-primary/10 text-primary flex-shrink-0">
                         {post.boardName}
                       </span>
+                      {post.status !== "게시중" && (
+                        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-muted text-muted-foreground flex-shrink-0">
+                          {post.status}
+                        </span>
+                      )}
                       <span className="text-sm font-medium text-foreground truncate">{post.title}</span>
                       {alreadyImported && (
                         <span className="inline-flex items-center gap-0.5 text-xs text-primary flex-shrink-0">
@@ -112,6 +155,51 @@ export function BoardPostPicker({ posts, importedPostIds, onImport, onClose }: P
             );
           })}
         </div>
+
+        {filtered.length > 0 && (
+          <div className="flex items-center justify-between border-t border-border px-5 py-2.5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>페이지당</span>
+              <FormSelect
+                value={String(limit)}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="h-7 w-16 text-xs"
+              >
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n}개
+                  </option>
+                ))}
+              </FormSelect>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage <= 1}
+                  className="rounded-md border border-border px-2.5 py-1 text-xs disabled:opacity-40 hover:bg-muted transition-colors"
+                >
+                  이전
+                </button>
+                <span className="px-2 text-xs text-muted-foreground tabular-nums">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="rounded-md border border-border px-2.5 py-1 text-xs disabled:opacity-40 hover:bg-muted transition-colors"
+                >
+                  다음
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex items-center justify-between border-t border-border px-5 py-3">
           <span className="text-sm text-muted-foreground">

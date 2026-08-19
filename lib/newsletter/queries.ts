@@ -258,6 +258,7 @@ export type BoardPostOption = {
   title: string;
   content: string;
   boardName: string;
+  status: string;
   newsletterUseCount: number;
   newsletterLastUsedAt: string | null;
   createdAt: string;
@@ -277,13 +278,12 @@ export async function getColumnBoardPosts(): Promise<BoardPostOption[]> {
   const { data: posts } = await db
     .from("board_posts")
     .select(
-      "id, title, content, board_id, user_id, newsletter_use_count, newsletter_last_used_at, created_at",
+      "id, title, content, board_id, user_id, status, newsletter_use_count, newsletter_last_used_at, created_at",
     )
     .in(
       "board_id",
       boards.map((b) => b.id),
     )
-    .eq("status", "게시중")
     .order("newsletter_use_count", { ascending: true })
     .order("created_at", { ascending: false });
 
@@ -312,6 +312,7 @@ export async function getColumnBoardPosts(): Promise<BoardPostOption[]> {
       title: p.title as string,
       content: p.content as string,
       boardName: boardNameById.get(p.board_id as string) ?? "",
+      status: p.status as string,
       newsletterUseCount: (p.newsletter_use_count as number | null) ?? 0,
       newsletterLastUsedAt: (p.newsletter_last_used_at as string | null) ?? null,
       createdAt: p.created_at as string,
