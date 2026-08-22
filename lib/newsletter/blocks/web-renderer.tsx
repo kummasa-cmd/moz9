@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { PostFeedbackButtons } from "@/components/newsletter/PostFeedbackButtons";
 import type { AdBanner } from "../types";
-import { sortBlocks, type ContentBlock } from "./types";
+import { getNewsletterPostFeedbackUrl } from "../config";
+import type { PostFeedbackCounts } from "../queries";
+import { groupBlocksBySourcePost, type ContentBlock } from "./types";
 
 function assertNever(block: never): null {
   return block;
@@ -81,34 +84,106 @@ function AdBannerBlockView({ banner }: { banner: AdBanner | undefined }) {
   );
 }
 
+function BlockView({ block, banners }: { block: ContentBlock; banners: Record<string, AdBanner> }) {
+  switch (block.type) {
+    case "heading":
+      return <HeadingBlockView block={block} />;
+    case "text":
+      return <TextBlockView block={block} />;
+    case "image":
+      return <ImageBlockView block={block} />;
+    case "button":
+      return <ButtonBlockView block={block} />;
+    case "divider":
+      return <DividerBlockView />;
+    case "ad_banner":
+      return <AdBannerBlockView banner={banners[block.content.bannerId]} />;
+    case "author_info":
+      return <AuthorInfoBlockView block={block} />;
+    default:
+      return assertNever(block);
+  }
+}
+
+// Per-post (게시물별) 좋았어요/아쉬워요 — one widget per imported board-post
+// section (column/series/info/ad boards, ad posts included), separate from
+// the whole-newsletter feedback in NewsletterFooterActions.
+function PostFeedbackView({
+  newsletterId,
+  slug,
+  sourcePostId,
+  counts,
+  votedType,
+  justVoted,
+}: {
+  newsletterId: string;
+  slug: string;
+  sourcePostId: string;
+  counts?: { likeCount: number; dislikeCount: number };
+  votedType: "like" | "dislike" | null;
+  justVoted: "like" | "dislike" | null;
+}) {
+  const likeUrl = getNewsletterPostFeedbackUrl(newsletterId, slug, sourcePostId, "like");
+  const dislikeUrl = getNewsletterPostFeedbackUrl(newsletterId, slug, sourcePostId, "dislike");
+
+  return (
+    <div id={`post-${sourcePostId}`} className="flex flex-wrap items-center gap-2 pt-1">
+      <span className="text-xs text-muted-foreground">이 글 어떠셨나요?</span>
+      <PostFeedbackButtons
+        likeUrl={likeUrl}
+        dislikeUrl={dislikeUrl}
+        likeCount={counts?.likeCount ?? 0}
+        dislikeCount={counts?.dislikeCount ?? 0}
+        votedType={votedType}
+        justVoted={justVoted}
+      />
+    </div>
+  );
+}
+
 export function NewsletterBlocks({
   blocks,
   banners = {},
+  newsletterId,
+  slug,
+  postFeedbackCounts = {},
+  postVotes = {},
+  justVotedPostId,
+  justVotedType = null,
 }: {
   blocks: ContentBlock[];
   banners?: Record<string, AdBanner>;
+  newsletterId: string;
+  slug: string;
+  postFeedbackCounts?: PostFeedbackCounts;
+  postVotes?: Record<string, "like" | "dislike">;
+  justVotedPostId?: string;
+  justVotedType?: "like" | "dislike" | null;
 }) {
+  const groups = groupBlocksBySourcePost(blocks);
+
   return (
     <div className="flex flex-col gap-4">
-      {sortBlocks(blocks).map((block) => {
-        switch (block.type) {
-          case "heading":
-            return <HeadingBlockView key={block.id} block={block} />;
-          case "text":
-            return <TextBlockView key={block.id} block={block} />;
-          case "image":
-            return <ImageBlockView key={block.id} block={block} />;
-          case "button":
-            return <ButtonBlockView key={block.id} block={block} />;
-          case "divider":
-            return <DividerBlockView key={block.id} />;
-          case "ad_banner":
-            return <AdBannerBlockView key={block.id} banner={banners[block.content.bannerId]} />;
-          case "author_info":
-            return <AuthorInfoBlockView key={block.id} block={block} />;
-          default:
-            return assertNever(block);
+      {groups.map((group) => {
+        if (group.kind === "single") {
+          return <BlockView key={group.block.id} block={group.block} banners={banners} />;
         }
+
+        return (
+          <div key={group.sourcePostId} className="flex flex-col gap-4">
+            {group.blocks.map((block) => (
+              <BlockView key={block.id} block={block} banners={banners} />
+            ))}
+            <PostFeedbackView
+              newsletterId={newsletterId}
+              slug={slug}
+              sourcePostId={group.sourcePostId}
+              counts={postFeedbackCounts[group.sourcePostId]}
+              votedType={postVotes[group.sourcePostId] ?? null}
+              justVoted={justVotedPostId === group.sourcePostId ? justVotedType : null}
+            />
+          </div>
+        );
       })}
     </div>
   );

@@ -75,7 +75,12 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
 
   const blocks = (newsletter.blocks as ContentBlock[] | null) ?? [];
   const banners = await getAdBannersByIds(getAdBannerIds(blocks));
-  const bodyHtml = renderBlocksToHtml(blocks, { brandColor: newsletterConfig.brandColor, banners });
+  const bodyHtml = renderBlocksToHtml(blocks, {
+    brandColor: newsletterConfig.brandColor,
+    banners,
+    newsletterId: newsletter.id,
+    slug: newsletter.slug,
+  });
   const templateHtml = buildEmailTemplate(bodyHtml, {
     newsletterId: newsletter.id,
     slug: newsletter.slug,

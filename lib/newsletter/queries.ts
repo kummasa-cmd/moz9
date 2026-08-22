@@ -352,6 +352,40 @@ export async function recordNewsletterFeedback(
   await db.rpc("increment_newsletter_feedback", { p_newsletter_id: newsletterId, p_type: type });
 }
 
+// Per-post (게시물별) feedback — keyed by ContentBlock.sourcePostId, separate
+// from the whole-newsletter like/dislike counters above.
+export async function recordNewsletterPostFeedback(
+  newsletterId: string,
+  sourcePostId: string,
+  type: "like" | "dislike",
+): Promise<void> {
+  const db = createAdminClient();
+  await db.rpc("increment_newsletter_post_feedback", {
+    p_newsletter_id: newsletterId,
+    p_source_post_id: sourcePostId,
+    p_type: type,
+  });
+}
+
+export type PostFeedbackCounts = Record<string, { likeCount: number; dislikeCount: number }>;
+
+export async function getNewsletterPostFeedbackCounts(newsletterId: string): Promise<PostFeedbackCounts> {
+  const db = createAdminClient();
+  const { data } = await db
+    .from("newsletter_post_feedback")
+    .select("source_post_id, like_count, dislike_count")
+    .eq("newsletter_id", newsletterId);
+
+  const counts: PostFeedbackCounts = {};
+  for (const row of data ?? []) {
+    counts[row.source_post_id as string] = {
+      likeCount: (row.like_count as number | null) ?? 0,
+      dislikeCount: (row.dislike_count as number | null) ?? 0,
+    };
+  }
+  return counts;
+}
+
 export async function getNewsletterTemplates(): Promise<NewsletterTemplate[]> {
   const db = createAdminClient();
   const { data } = await db

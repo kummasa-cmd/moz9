@@ -28,7 +28,12 @@ export default async function AdminNewsletterPreviewPage({ params }: Props) {
   const blocks = (newsletter.blocks as ContentBlock[] | null) ?? [];
   const banners = await getAdBannersByIds(getAdBannerIds(blocks));
 
-  const emailBody = renderBlocksToHtml(blocks, { brandColor: newsletterConfig.brandColor, banners });
+  const emailBody = renderBlocksToHtml(blocks, {
+    brandColor: newsletterConfig.brandColor,
+    banners,
+    newsletterId: newsletter.id,
+    slug: newsletter.slug,
+  });
   const emailHtml = buildPreviewEmailHtml(emailBody, { newsletterId: newsletter.id, slug: newsletter.slug });
 
   return (
@@ -37,7 +42,17 @@ export default async function AdminNewsletterPreviewPage({ params }: Props) {
         title="미리보기"
         description={`"${newsletter.title}" · 이메일 제목: ${newsletter.subject}`}
       />
-      <PreviewToggle web={<NewsletterBlocks blocks={blocks} banners={banners} />} emailHtml={emailHtml} />
+      <PreviewToggle
+        web={
+          <NewsletterBlocks
+            blocks={blocks}
+            banners={banners}
+            newsletterId={newsletter.id}
+            slug={newsletter.slug}
+          />
+        }
+        emailHtml={emailHtml}
+      />
     </div>
   );
 }

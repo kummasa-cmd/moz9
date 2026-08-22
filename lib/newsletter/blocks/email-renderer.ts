@@ -1,6 +1,6 @@
-import { newsletterConfig } from "../config";
+import { newsletterConfig, getNewsletterPostFeedbackUrl } from "../config";
 import type { AdBanner } from "../types";
-import { sortBlocks, type ContentBlock } from "./types";
+import { groupBlocksBySourcePost, type ContentBlock } from "./types";
 
 const FONT_STACK = "'Pretendard', 'Inter', -apple-system, sans-serif";
 const TEXT_COLOR = "#1A1A2E";
@@ -58,30 +58,56 @@ function renderAdBanner(banner: AdBanner | undefined): string {
   return `<a href="${escapeHtml(banner.linkUrl)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(banner.imageUrl)}" alt="${escapeHtml(banner.name)}" style="max-width:100%;display:block;margin:0 0 16px;border-radius:8px;" /></a>`;
 }
 
-export function renderBlocksToHtml(
-  blocks: ContentBlock[],
+// Per-post (게시물별) 좋았어요/아쉬워요 — one widget per imported board-post
+// section (column/series/info/ad boards, ad posts included), separate from
+// the whole-newsletter feedback in renderEmailFooterActions (lib/newsletter/email.ts).
+function renderPostFeedback(newsletterId: string, slug: string, sourcePostId: string): string {
+  const likeUrl = getNewsletterPostFeedbackUrl(newsletterId, slug, sourcePostId, "like");
+  const dislikeUrl = getNewsletterPostFeedbackUrl(newsletterId, slug, sourcePostId, "dislike");
+  const linkStyle =
+    "display:inline-block;padding:5px 12px;border-radius:999px;font-family:'Pretendard','Inter',-apple-system,sans-serif;font-size:12px;text-decoration:none;border:1px solid #E5E7EB;color:#6B7280;margin-right:6px;";
+
+  return `<div style="margin:0 0 16px;">
+    <span style="font-family:'Pretendard','Inter',-apple-system,sans-serif;font-size:12px;color:#6B7280;margin-right:6px;">이 글 어떠셨나요?</span>
+    <a href="${likeUrl}" style="${linkStyle}">👍 좋았어요</a>
+    <a href="${dislikeUrl}" style="${linkStyle}">👎 아쉬워요</a>
+  </div>`;
+}
+
+function renderBlock(
+  block: ContentBlock,
   options: { brandColor: string; banners: Record<string, AdBanner> },
 ): string {
-  return sortBlocks(blocks)
-    .map((block) => {
-      switch (block.type) {
-        case "heading":
-          return renderHeading(block);
-        case "text":
-          return renderText(block);
-        case "image":
-          return renderImage(block);
-        case "button":
-          return renderButton(block, options.brandColor);
-        case "divider":
-          return renderDivider();
-        case "ad_banner":
-          return renderAdBanner(options.banners[block.content.bannerId]);
-        case "author_info":
-          return renderAuthorInfo(block);
-        default:
-          return assertNever(block);
-      }
+  switch (block.type) {
+    case "heading":
+      return renderHeading(block);
+    case "text":
+      return renderText(block);
+    case "image":
+      return renderImage(block);
+    case "button":
+      return renderButton(block, options.brandColor);
+    case "divider":
+      return renderDivider();
+    case "ad_banner":
+      return renderAdBanner(options.banners[block.content.bannerId]);
+    case "author_info":
+      return renderAuthorInfo(block);
+    default:
+      return assertNever(block);
+  }
+}
+
+export function renderBlocksToHtml(
+  blocks: ContentBlock[],
+  options: { brandColor: string; banners: Record<string, AdBanner>; newsletterId: string; slug: string },
+): string {
+  return groupBlocksBySourcePost(blocks)
+    .map((group) => {
+      if (group.kind === "single") return renderBlock(group.block, options);
+
+      const body = group.blocks.map((block) => renderBlock(block, options)).join("\n");
+      return body + renderPostFeedback(options.newsletterId, options.slug, group.sourcePostId);
     })
     .join("\n");
 }

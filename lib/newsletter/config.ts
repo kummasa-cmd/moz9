@@ -23,6 +23,15 @@ export function getNewsletterFeedbackUrl(
   return `${newsletterConfig.siteUrl}/api/newsletter/feedback/${newsletterId}?type=${type}&slug=${encodeURIComponent(slug)}`;
 }
 
+export function getNewsletterPostFeedbackUrl(
+  newsletterId: string,
+  slug: string,
+  sourcePostId: string,
+  type: "like" | "dislike",
+): string {
+  return `${newsletterConfig.siteUrl}/api/newsletter/post-feedback/${newsletterId}?type=${type}&slug=${encodeURIComponent(slug)}&postId=${sourcePostId}`;
+}
+
 export function getContactUrl(): string {
   return `${newsletterConfig.siteUrl}/contact`;
 }

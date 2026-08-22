@@ -1,19 +1,20 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
 import Link from "next/link";
 import {
   getPublishedNewsletterBySlug,
   getAdBannersByIds,
+  getNewsletterPostFeedbackCounts,
   recordNewsletterView,
 } from "@/lib/newsletter/queries";
-import { getAdBannerIds } from "@/lib/newsletter/blocks/types";
+import { getAdBannerIds, getSourcePostIds } from "@/lib/newsletter/blocks/types";
 import { NewsletterBlocks } from "@/lib/newsletter/blocks/web-renderer";
 import { NewsletterFooterActions } from "@/components/newsletter/NewsletterFooterActions";
 
 type Props = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ feedback?: string }>;
+  searchParams: Promise<{ feedback?: string; postFeedback?: string; postFeedbackId?: string }>;
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -31,7 +32,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function NewsletterDetailPage({ params, searchParams }: Props) {
   const { slug: rawSlug } = await params;
   const slug = decodeURIComponent(rawSlug);
-  const { feedback } = await searchParams;
+  const { feedback, postFeedback, postFeedbackId } = await searchParams;
   const newsletter = await getPublishedNewsletterBySlug(slug);
   if (!newsletter) notFound();
 
@@ -39,6 +40,15 @@ export default async function NewsletterDetailPage({ params, searchParams }: Pro
   await recordNewsletterView(newsletter.id, null, headerList.get("referer"));
 
   const banners = await getAdBannersByIds(getAdBannerIds(newsletter.blocks));
+  const postFeedbackCounts = await getNewsletterPostFeedbackCounts(newsletter.id);
+  const justVotedType = postFeedback === "like" || postFeedback === "dislike" ? postFeedback : null;
+
+  const cookieStore = await cookies();
+  const postVotes: Record<string, "like" | "dislike"> = {};
+  for (const sourcePostId of getSourcePostIds(newsletter.blocks)) {
+    const vote = cookieStore.get(`nl_voted_post_${newsletter.id}_${sourcePostId}`)?.value;
+    if (vote === "like" || vote === "dislike") postVotes[sourcePostId] = vote;
+  }
 
   return (
     <article className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
@@ -71,7 +81,16 @@ export default async function NewsletterDetailPage({ params, searchParams }: Pro
       <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-3">{newsletter.title}</h1>
       <p className="text-sm text-muted-foreground mb-10">조회 {newsletter.viewCount.toLocaleString()}</p>
 
-      <NewsletterBlocks blocks={newsletter.blocks} banners={banners} />
+      <NewsletterBlocks
+        blocks={newsletter.blocks}
+        banners={banners}
+        newsletterId={newsletter.id}
+        slug={newsletter.slug}
+        postFeedbackCounts={postFeedbackCounts}
+        postVotes={postVotes}
+        justVotedPostId={postFeedbackId}
+        justVotedType={justVotedType}
+      />
 
       {(feedback === "like" || feedback === "dislike") && (
         <p className="mt-8 text-center text-sm text-primary">소중한 의견 감사합니다.</p>
