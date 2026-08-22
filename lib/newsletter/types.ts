@@ -30,6 +30,7 @@ export type Newsletter = {
   viewCount: number;
   likeCount: number;
   dislikeCount: number;
+  issueNumber: number | null;
   publishedAt: string | null;
   createdAt: string;
 };

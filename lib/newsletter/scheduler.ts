@@ -1,7 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAdBannerIds, getSourcePostIds, type ContentBlock } from "./blocks/types";
 import { renderBlocksToHtml } from "./blocks/email-renderer";
-import { getAdBannersByIds, getTargetSubscribers, recordBoardPostNewsletterUsage } from "./queries";
+import {
+  assignNewsletterIssueNumber,
+  getAdBannersByIds,
+  getTargetSubscribers,
+  recordBoardPostNewsletterUsage,
+} from "./queries";
 import { newsletterConfig } from "./config";
 import { buildEmailTemplate, chunk, getResendClient, personalizeEmail } from "./email";
 
@@ -153,6 +158,7 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
 
   if (totalSent > 0) {
     await recordBoardPostNewsletterUsage(getSourcePostIds(blocks));
+    await assignNewsletterIssueNumber(newsletter.id);
   }
 
   if (allFailed) {

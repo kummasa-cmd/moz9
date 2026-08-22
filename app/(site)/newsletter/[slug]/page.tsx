@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import {
   getPublishedNewsletterBySlug,
   getAdBannersByIds,
@@ -43,20 +42,34 @@ export default async function NewsletterDetailPage({ params, searchParams }: Pro
 
   return (
     <article className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-      <Link
-        href="/newsletter"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors mb-8"
-      >
-        <ChevronLeft size={16} />
-        목록으로
-      </Link>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground mb-8 pb-4 border-b border-border">
+        {newsletter.publishedAt && (
+          <span>{new Date(newsletter.publishedAt).toLocaleDateString("ko-KR")}</span>
+        )}
+        {newsletter.issueNumber !== null && (
+          <>
+            <span aria-hidden className="text-border">
+              |
+            </span>
+            <span>제{newsletter.issueNumber}호</span>
+          </>
+        )}
+        <span aria-hidden className="text-border">
+          |
+        </span>
+        <Link href="/newsletter/subscribe" className="hover:text-primary transition-colors">
+          구독하기
+        </Link>
+        <span aria-hidden className="text-border">
+          |
+        </span>
+        <Link href="/newsletter" className="hover:text-primary transition-colors">
+          지난호
+        </Link>
+      </div>
 
       <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-3">{newsletter.title}</h1>
-      <p className="text-sm text-muted-foreground mb-10">
-        {newsletter.publishedAt ? new Date(newsletter.publishedAt).toLocaleDateString("ko-KR") : ""}
-        {" · "}
-        조회 {newsletter.viewCount.toLocaleString()}
-      </p>
+      <p className="text-sm text-muted-foreground mb-10">조회 {newsletter.viewCount.toLocaleString()}</p>
 
       <NewsletterBlocks blocks={newsletter.blocks} banners={banners} />
 

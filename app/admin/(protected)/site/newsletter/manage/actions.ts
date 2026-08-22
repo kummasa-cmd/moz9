@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { processCampaign } from "@/lib/newsletter/scheduler";
-import { recordBoardPostNewsletterUsage } from "@/lib/newsletter/queries";
+import { assignNewsletterIssueNumber, recordBoardPostNewsletterUsage } from "@/lib/newsletter/queries";
 import { getSourcePostIds, type ContentBlock } from "@/lib/newsletter/blocks/types";
 import { kstDatetimeLocalToUtcIso } from "@/lib/newsletter/schedule-time";
 
@@ -94,6 +94,15 @@ export async function saveNewsletterCampaign(id: string | null, formData: FormDa
 
   const afterSaveEditUrl = `/admin/site/newsletter/manage/${newsletterId}`;
   const enableCampaign = formData.get("enable_campaign") === "on";
+
+  // Pure web publish (no email campaign) is visible immediately, so it counts
+  // as a real publish right away. When a campaign is attached, the issue
+  // number is assigned later at the actual send (processCampaign in
+  // scheduler.ts) — a PUBLISHED newsletter waiting on an unsent SCHEDULED
+  // campaign ("임시 대기") must not be counted yet.
+  if (isFirstPublish && !enableCampaign) {
+    await assignNewsletterIssueNumber(newsletterId!);
+  }
 
   if (enableCampaign) {
     const send_type = String(formData.get("send_type") ?? "SCHEDULED");

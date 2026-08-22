@@ -3,7 +3,7 @@ import type { ContentBlock } from "./blocks/types";
 import type { AdBanner, Newsletter, NewsletterTemplate, Subscriber, SubscriberSource } from "./types";
 
 const NEWSLETTER_COLUMNS =
-  "id, title, slug, subject, preheader, thumbnail_url, status, blocks, view_count, like_count, dislike_count, published_at, created_at";
+  "id, title, slug, subject, preheader, thumbnail_url, status, blocks, view_count, like_count, dislike_count, issue_number, published_at, created_at";
 
 const AD_BANNER_COLUMNS = "id, name, image_url, link_url, position, start_date, end_date, is_active";
 
@@ -23,6 +23,7 @@ function mapNewsletter(row: Record<string, unknown>): Newsletter {
     viewCount: (row.view_count as number | null) ?? 0,
     likeCount: (row.like_count as number | null) ?? 0,
     dislikeCount: (row.dislike_count as number | null) ?? 0,
+    issueNumber: (row.issue_number as number | null) ?? null,
     publishedAt: (row.published_at as string | null) ?? null,
     createdAt: row.created_at as string,
   };
@@ -138,6 +139,20 @@ export async function recordNewsletterView(
     referrer,
   });
   await db.rpc("increment_newsletter_view_count", { p_newsletter_id: newsletterId });
+}
+
+// Assigns the newsletter's issue number (발행호수) the first time it is
+// actually published — see filterOutUnsentScheduled above for the "실제
+// 발행" definition this must match. Idempotent: a newsletter that already has
+// an issue number keeps it. Call sites: manage/actions.ts (pure web publish,
+// no campaign) and scheduler.ts::processCampaign (first real email send).
+export async function assignNewsletterIssueNumber(newsletterId: string): Promise<number | null> {
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("assign_newsletter_issue_number", {
+    p_newsletter_id: newsletterId,
+  });
+  if (error) return null;
+  return data as number;
 }
 
 export async function getAdBannersByIds(ids: string[]): Promise<Record<string, AdBanner>> {
