@@ -39,7 +39,7 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
 
   const { data: newsletter } = await db
     .from("newsletters")
-    .select("id, slug, subject, blocks")
+    .select("id, slug, subject, blocks, published_at")
     .eq("id", campaign.newsletter_id)
     .maybeSingle();
 
@@ -73,6 +73,11 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
     return { ok: true, sent: 0, recipients: 0 };
   }
 
+  // Assigned here (before the email is composed) rather than after sending,
+  // so the issue number embedded in the email itself is correct on the very
+  // first real send — see assignNewsletterIssueNumber for the "실제 발행" rule.
+  const issueNumber = await assignNewsletterIssueNumber(newsletter.id);
+
   const blocks = (newsletter.blocks as ContentBlock[] | null) ?? [];
   const banners = await getAdBannersByIds(getAdBannerIds(blocks));
   const bodyHtml = renderBlocksToHtml(blocks, {
@@ -84,6 +89,8 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
   const templateHtml = buildEmailTemplate(bodyHtml, {
     newsletterId: newsletter.id,
     slug: newsletter.slug,
+    publishedAt: newsletter.published_at,
+    issueNumber,
   });
 
   const deliveryRows = subscribers.map((s) => ({
@@ -163,7 +170,6 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
 
   if (totalSent > 0) {
     await recordBoardPostNewsletterUsage(getSourcePostIds(blocks));
-    await assignNewsletterIssueNumber(newsletter.id);
   }
 
   if (allFailed) {

@@ -19,7 +19,7 @@ export default async function AdminNewsletterPreviewPage({ params }: Props) {
   const supabase = createAdminClient();
   const { data: newsletter } = await supabase
     .from("newsletters")
-    .select("id, title, slug, subject, blocks")
+    .select("id, title, slug, subject, blocks, published_at, issue_number")
     .eq("id", id)
     .maybeSingle();
 
@@ -34,7 +34,12 @@ export default async function AdminNewsletterPreviewPage({ params }: Props) {
     newsletterId: newsletter.id,
     slug: newsletter.slug,
   });
-  const emailHtml = buildPreviewEmailHtml(emailBody, { newsletterId: newsletter.id, slug: newsletter.slug });
+  const emailHtml = buildPreviewEmailHtml(emailBody, {
+    newsletterId: newsletter.id,
+    slug: newsletter.slug,
+    publishedAt: newsletter.published_at,
+    issueNumber: newsletter.issue_number,
+  });
 
   return (
     <div>

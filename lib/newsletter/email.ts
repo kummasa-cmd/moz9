@@ -18,6 +18,30 @@ export function getResendClient(): Resend {
 const OPEN_PIXEL_PLACEHOLDER = "__NEWSLETTER_OPEN_PIXEL__";
 const UNSUBSCRIBE_URL_PLACEHOLDER = "__NEWSLETTER_UNSUBSCRIBE_URL__";
 
+// Mirrors the top meta bar on the web reading page (app/(site)/newsletter/[slug]/page.tsx):
+// date | issue number | subscribe | archive.
+function renderEmailHeaderMeta(meta: { publishedAt: string | null; issueNumber: number | null }): string {
+  const linkStyle = "color:#6B7280;text-decoration:underline;";
+  const sepStyle = "color:#E5E7EB;margin:0 8px;";
+  const parts: string[] = [];
+
+  if (meta.publishedAt) {
+    parts.push(
+      `<span style="color:#6B7280;">${new Date(meta.publishedAt).toLocaleDateString("ko-KR")}</span>`,
+    );
+  }
+  if (meta.issueNumber !== null) {
+    parts.push(`<span style="color:#6B7280;">제${meta.issueNumber}호</span>`);
+  }
+  parts.push(`<a href="${getNewsletterSubscribeUrl()}" style="${linkStyle}">구독하기</a>`);
+  parts.push(`<a href="${getNewsletterArchiveUrl()}" style="${linkStyle}">지난호</a>`);
+
+  return `
+      <div style="margin:0 0 20px;padding-bottom:16px;border-bottom:1px solid #E5E7EB;font-family:'Pretendard','Inter',-apple-system,sans-serif;font-size:12px;">
+        ${parts.join(`<span style="${sepStyle}">|</span>`)}
+      </div>`;
+}
+
 function renderEmailFooterActions(newsletterId: string, slug: string): string {
   const likeUrl = getNewsletterFeedbackUrl(newsletterId, slug, "like");
   const dislikeUrl = getNewsletterFeedbackUrl(newsletterId, slug, "dislike");
@@ -41,7 +65,7 @@ function renderEmailFooterActions(newsletterId: string, slug: string): string {
 
 export function buildEmailTemplate(
   bodyHtml: string,
-  meta: { newsletterId: string; slug: string },
+  meta: { newsletterId: string; slug: string; publishedAt: string | null; issueNumber: number | null },
 ): string {
   return `<!doctype html>
 <html>
@@ -51,6 +75,7 @@ export function buildEmailTemplate(
   </head>
   <body style="margin:0;padding:24px;background:#f4f4f5;">
     <div style="max-width:600px;margin:0 auto;background:#ffffff;padding:32px;border-radius:12px;">
+      ${renderEmailHeaderMeta({ publishedAt: meta.publishedAt, issueNumber: meta.issueNumber })}
       ${bodyHtml}
       ${renderEmailFooterActions(meta.newsletterId, meta.slug)}
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:32px 0 16px;" />
@@ -67,7 +92,10 @@ export function buildEmailTemplate(
 
 // Admin preview only: renders the real email template (footer buttons, unsubscribe line)
 // with harmless stand-in links since there's no real delivery/tracking token yet.
-export function buildPreviewEmailHtml(bodyHtml: string, meta: { newsletterId: string; slug: string }): string {
+export function buildPreviewEmailHtml(
+  bodyHtml: string,
+  meta: { newsletterId: string; slug: string; publishedAt: string | null; issueNumber: number | null },
+): string {
   return buildEmailTemplate(bodyHtml, meta)
     .replaceAll(UNSUBSCRIBE_URL_PLACEHOLDER, "#")
     .replaceAll(OPEN_PIXEL_PLACEHOLDER, "");
