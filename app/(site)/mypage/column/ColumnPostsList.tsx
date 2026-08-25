@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -48,6 +49,7 @@ export default function ColumnPostsList({ posts, page, limit, totalPages }: Prop
               <TableHead className="w-28">카테고리</TableHead>
               <TableHead>제목</TableHead>
               <TableHead className="w-28">등록일</TableHead>
+              <TableHead className="w-20 text-center">공개여부</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -66,6 +68,11 @@ export default function ColumnPostsList({ posts, page, limit, totalPages }: Prop
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {new Date(p.createdAt).toLocaleDateString("ko-KR")}
+                </TableCell>
+                <TableCell className="text-center">
+                  <Badge variant={p.newsletterPublished ? "default" : "secondary"}>
+                    {p.newsletterPublished ? "공개" : "비공개"}
+                  </Badge>
                 </TableCell>
               </TableRow>
             ))}

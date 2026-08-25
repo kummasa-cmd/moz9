@@ -13,4 +13,5 @@ export type AdminPostRow = {
   commentCount: number;
   newsletterUseCount: number;
   newsletterLastUsedAt: string | null;
+  newsletterPublished: boolean;
 };

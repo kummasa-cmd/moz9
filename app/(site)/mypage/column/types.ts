@@ -8,4 +8,5 @@ export type MyColumnPostRow = {
   category: string;
   title: string;
   createdAt: string;
+  newsletterPublished: boolean;
 };

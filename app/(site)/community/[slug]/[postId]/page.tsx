@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isAdmin, isColumnMember } from "@/lib/community-auth";
+import { isAdmin, isColumnMember, canViewColumnPost } from "@/lib/community-auth";
 import { deletePost } from "../actions";
 import { addComment, deleteComment } from "./actions";
 
@@ -42,17 +42,15 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
 
   if (!board) notFound();
 
-  if (board.column_only && !admin && !user) {
-    redirect(`/login?next=/community/${slug}/${postId}`);
-  }
-
   const columnMember = admin || (board.column_only && user !== null && (await isColumnMember(user.id)));
 
   const isPrivate = board.type === "개인";
 
   const { data: post } = await db
     .from("board_posts")
-    .select("id, title, content, author, created_at, published_at, view_count, is_notice, user_id")
+    .select(
+      "id, title, content, author, created_at, published_at, view_count, is_notice, user_id, newsletter_published",
+    )
     .eq("id", postId)
     .eq("board_id", board.id)
     .eq("status", "게시중")
@@ -63,6 +61,11 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
   if (isPrivate && !admin) {
     if (!user) redirect(`/login?next=/community/${slug}/${postId}`);
     if (post.user_id !== user.id) redirect(`/community/${slug}`);
+  }
+
+  if (!canViewColumnPost(admin, user, post, board)) {
+    if (!user) redirect(`/login?next=/community/${slug}/${postId}`);
+    redirect(`/community/${slug}`);
   }
 
   // Increment view count
@@ -121,6 +124,11 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
                 공지
               </span>
             )}
+            {board.column_only && !post.newsletter_published && (
+              <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold bg-muted text-muted-foreground mr-2">
+                비공개 (뉴스레터 소개 전)
+              </span>
+            )}
             <h1 className="inline text-2xl font-bold text-foreground">{post.title}</h1>
           </div>
           {editable && (
@@ -155,6 +163,13 @@ export default async function CommunityPostDetailPage({ params, searchParams }: 
           <div className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
             {post.content}
           </div>
+        )}
+
+        {board.column_only && (
+          <p className="text-xs text-muted-foreground/70 mt-6 pt-4 border-t border-border">
+            이 글의 저작권은 {post.author ? `${post.author}님` : "작성자"}에게 있으며, 사전 동의 없이
+            무단으로 복제·전재·재배포하거나 변형할 수 없습니다.
+          </p>
         )}
       </div>
 

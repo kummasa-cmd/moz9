@@ -16,10 +16,12 @@ type BoardPostEntryFormProps = {
     author?: string | null;
     published_at?: string | null;
     is_notice?: boolean;
+    newsletter_published?: boolean;
   };
   categories?: Category[];
   error?: string;
   submitLabel?: string;
+  showNewsletterToggle?: boolean;
 };
 
 export default function BoardPostEntryForm({
@@ -28,6 +30,7 @@ export default function BoardPostEntryForm({
   categories,
   error,
   submitLabel = "저장",
+  showNewsletterToggle = false,
 }: BoardPostEntryFormProps) {
   const publishedAt = defaultValues.published_at
     ? new Date(defaultValues.published_at).toISOString().slice(0, 16)
@@ -61,6 +64,22 @@ export default function BoardPostEntryForm({
             <option value="숨김">숨김</option>
           </FormSelect>
         </div>
+
+        {showNewsletterToggle && (
+          <label htmlFor="newsletter_published" className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              id="newsletter_published"
+              name="newsletter_published"
+              type="checkbox"
+              defaultChecked={defaultValues.newsletter_published ?? false}
+              className="h-4 w-4 accent-primary"
+            />
+            <span className="text-sm font-medium">뉴스레터 사용됨 (전체 공개)</span>
+            <span className="text-xs text-muted-foreground">
+              해제 시 작성자와 관리자만 볼 수 있습니다.
+            </span>
+          </label>
+        )}
       </div>
 
       {/* 카테고리 */}

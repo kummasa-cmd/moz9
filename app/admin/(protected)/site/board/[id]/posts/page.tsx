@@ -35,7 +35,7 @@ export default async function AdminBoardPostsPage({ params, searchParams }: Prop
     supabase
       .from("board_posts")
       .select(
-        "id, title, status, created_at, category_id, is_notice, author, view_count, newsletter_use_count, newsletter_last_used_at",
+        "id, title, status, created_at, category_id, is_notice, author, view_count, newsletter_use_count, newsletter_last_used_at, newsletter_published",
         { count: "exact" },
       )
       .eq("board_id", id)
@@ -76,6 +76,7 @@ export default async function AdminBoardPostsPage({ params, searchParams }: Prop
     commentCount: commentCountMap.get(p.id) ?? 0,
     newsletterUseCount: p.newsletter_use_count ?? 0,
     newsletterLastUsedAt: p.newsletter_last_used_at,
+    newsletterPublished: p.newsletter_published ?? false,
   }));
 
   return (

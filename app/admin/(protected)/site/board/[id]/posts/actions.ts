@@ -12,6 +12,7 @@ export async function createBoardPost(boardId: string, formData: FormData) {
   const author = String(formData.get("author") ?? "").trim() || null;
   const published_at = String(formData.get("published_at") ?? "") || null;
   const is_notice = formData.get("is_notice") === "on";
+  const newsletter_published = formData.get("newsletter_published") === "on";
 
   const supabase = createAdminClient();
   const { error } = await supabase.from("board_posts").insert({
@@ -23,6 +24,7 @@ export async function createBoardPost(boardId: string, formData: FormData) {
     author,
     published_at,
     is_notice,
+    newsletter_published,
   });
 
   if (error) {
@@ -44,11 +46,12 @@ export async function updateBoardPost(boardId: string, postId: string, formData:
   const author = String(formData.get("author") ?? "").trim() || null;
   const published_at = String(formData.get("published_at") ?? "") || null;
   const is_notice = formData.get("is_notice") === "on";
+  const newsletter_published = formData.get("newsletter_published") === "on";
 
   const supabase = createAdminClient();
   const { error } = await supabase
     .from("board_posts")
-    .update({ title, content, status, category_id, author, published_at, is_notice })
+    .update({ title, content, status, category_id, author, published_at, is_notice, newsletter_published })
     .eq("id", postId)
     .eq("board_id", boardId);
 

@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Pencil, Lock, ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -39,19 +39,16 @@ export default async function CommunityBoardPage({ params, searchParams }: Props
 
   if (!board) notFound();
 
-  if (board.column_only && !admin && !user) {
-    redirect(`/login?next=/community/${slug}`);
-  }
-
   const columnMember = admin || (board.column_only && user !== null && (await isColumnMember(user.id)));
 
   const isPrivate = board.type === "개인";
 
   let query = db
     .from("board_posts")
-    .select("id, title, author, created_at, is_notice, view_count, status, user_id", {
-      count: "exact",
-    })
+    .select(
+      "id, title, author, created_at, is_notice, view_count, status, user_id, newsletter_published",
+      { count: "exact" },
+    )
     .eq("board_id", board.id)
     .eq("status", "게시중")
     .order("is_notice", { ascending: false })
@@ -63,6 +60,12 @@ export default async function CommunityBoardPage({ params, searchParams }: Props
     } else {
       query = query.eq("user_id", "00000000-0000-0000-0000-000000000000");
     }
+  }
+
+  if (board.column_only && !admin) {
+    query = user
+      ? query.or(`newsletter_published.eq.true,user_id.eq.${user.id}`)
+      : query.eq("newsletter_published", true);
   }
 
   const { data: posts, count } = await query.range(offset, offset + limit - 1);
@@ -83,6 +86,7 @@ export default async function CommunityBoardPage({ params, searchParams }: Props
         user !== null &&
         user.id === post.user_id &&
         (!board.column_only || columnMember)),
+    newsletterPublished: board.column_only ? post.newsletter_published : null,
   }));
 
   const canWrite = admin || (board.allow_user_write && user !== null && (!board.column_only || columnMember));
@@ -124,6 +128,12 @@ export default async function CommunityBoardPage({ params, searchParams }: Props
             </Link>
             {" "}후 이용할 수 있습니다.
           </p>
+        )}
+        {board.column_only && (
+          <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+            {!admin && <p>뉴스레터에 소개된 글만 공개됩니다. 그 외 글은 작성자와 관리자만 볼 수 있습니다.</p>}
+            <p>게시된 글의 저작권은 각 작성자에게 있으며, 사전 동의 없이 무단으로 복제·전재·재배포하거나 변형할 수 없습니다.</p>
+          </div>
         )}
       </div>
 

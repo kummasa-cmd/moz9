@@ -52,7 +52,7 @@ export default function PostsTable({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
 
-  const colCount = (useCategory ? 8 : 7) + 1 + (showNewsletterUsage ? 2 : 0);
+  const colCount = (useCategory ? 8 : 7) + 1 + (showNewsletterUsage ? 3 : 0);
   const allSelected = posts.length > 0 && posts.every((p) => selected.has(p.id));
 
   function toggleAll() {
@@ -125,6 +125,7 @@ export default function PostsTable({
                 <>
                   <TableHead className="w-24 text-center">뉴스레터 사용횟수</TableHead>
                   <TableHead className="w-28 text-center">최종 사용일</TableHead>
+                  <TableHead className="w-20 text-center">공개여부</TableHead>
                 </>
               )}
               <TableHead className="w-20">상태</TableHead>
@@ -189,6 +190,11 @@ export default function PostsTable({
                       ) : (
                         <span className="text-muted-foreground/40">-</span>
                       )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={p.newsletterPublished ? "default" : "secondary"}>
+                        {p.newsletterPublished ? "공개" : "비공개"}
+                      </Badge>
                     </TableCell>
                   </>
                 )}

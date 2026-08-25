@@ -42,3 +42,18 @@ export async function canWriteToBoard(
   if (board.column_only) return isColumnMember(user.id);
   return true;
 }
+
+// Column boards (컬럼/연재/정보/광고): a post is visible only to its author and
+// admins until it has been featured in a newsletter (newsletter_published),
+// after which it is public to everyone, including logged-out visitors.
+export function canViewColumnPost(
+  admin: boolean,
+  user: User | null,
+  post: { user_id: string | null; newsletter_published: boolean },
+  board: { column_only: boolean },
+): boolean {
+  if (!board.column_only) return true;
+  if (admin) return true;
+  if (post.newsletter_published) return true;
+  return user !== null && user.id === post.user_id;
+}

@@ -89,3 +89,11 @@ export function getAdBannerIds(blocks: ContentBlock[]): string[] {
 export function getSourcePostIds(blocks: ContentBlock[]): string[] {
   return [...new Set(blocks.map((block) => block.sourcePostId).filter((id): id is string => !!id))];
 }
+
+// Reads the author name off a section's auto-inserted author_info block (if
+// any), so the copyright notice next to each imported post can name the
+// actual author instead of a generic "작성자".
+export function getSectionAuthorName(blocks: ContentBlock[]): string | null {
+  const authorBlock = blocks.find((block): block is AuthorInfoBlock => block.type === "author_info");
+  return authorBlock?.content.name ?? null;
+}

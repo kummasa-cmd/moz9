@@ -4,7 +4,7 @@ import { PostFeedbackButtons } from "@/components/newsletter/PostFeedbackButtons
 import type { AdBanner } from "../types";
 import { getNewsletterPostFeedbackUrl } from "../config";
 import type { PostFeedbackCounts } from "../queries";
-import { groupBlocksBySourcePost, type ContentBlock } from "./types";
+import { groupBlocksBySourcePost, getSectionAuthorName, type ContentBlock } from "./types";
 
 function assertNever(block: never): null {
   return block;
@@ -105,6 +105,15 @@ function BlockView({ block, banners }: { block: ContentBlock; banners: Record<st
   }
 }
 
+function CopyrightNotice({ authorName }: { authorName: string | null }) {
+  return (
+    <p className="text-xs text-muted-foreground/70">
+      이 글의 저작권은 {authorName ? `${authorName}님` : "작성자"}에게 있으며, 사전 동의 없이 무단으로
+      복제·전재·재배포하거나 변형할 수 없습니다.
+    </p>
+  );
+}
+
 // Per-post (게시물별) 좋았어요/아쉬워요 — one widget per imported board-post
 // section (column/series/info/ad boards, ad posts included), separate from
 // the whole-newsletter feedback in NewsletterFooterActions.
@@ -174,6 +183,7 @@ export function NewsletterBlocks({
             {group.blocks.map((block) => (
               <BlockView key={block.id} block={block} banners={banners} />
             ))}
+            <CopyrightNotice authorName={getSectionAuthorName(group.blocks)} />
             <PostFeedbackView
               newsletterId={newsletterId}
               slug={slug}

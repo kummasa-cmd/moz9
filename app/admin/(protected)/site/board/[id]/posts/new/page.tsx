@@ -18,7 +18,7 @@ export default async function AdminBoardPostNewPage({ params, searchParams }: Pr
 
   const { data: board } = await supabase
     .from("boards")
-    .select("id, name, use_category")
+    .select("id, name, use_category, column_only")
     .eq("id", id)
     .maybeSingle();
 
@@ -51,6 +51,7 @@ export default async function AdminBoardPostNewPage({ params, searchParams }: Pr
         categories={categories}
         error={error}
         submitLabel="게시물 등록"
+        showNewsletterToggle={board.column_only}
       />
     </div>
   );

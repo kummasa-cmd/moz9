@@ -126,6 +126,11 @@ export default function PostsList({
                       공지
                     </span>
                   )}
+                  {post.newsletterPublished === false && (
+                    <span className="flex-shrink-0 inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-muted text-muted-foreground">
+                      비공개
+                    </span>
+                  )}
                   <Link
                     href={`/community/${slug}/${post.id}`}
                     className="text-sm font-medium text-foreground hover:text-primary hover:underline truncate transition-colors"

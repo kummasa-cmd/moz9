@@ -8,4 +8,5 @@ export type CommunityPostRow = {
   isNotice: boolean;
   viewCount: number;
   editable: boolean;
+  newsletterPublished: boolean | null;
 };

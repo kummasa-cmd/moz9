@@ -17,10 +17,10 @@ export default async function AdminBoardPostEditPage({ params, searchParams }: P
   const supabase = createAdminClient();
 
   const [{ data: board }, { data: post }] = await Promise.all([
-    supabase.from("boards").select("id, name, use_category").eq("id", id).maybeSingle(),
+    supabase.from("boards").select("id, name, use_category, column_only").eq("id", id).maybeSingle(),
     supabase
       .from("board_posts")
-      .select("id, title, content, status, category_id")
+      .select("id, title, content, status, category_id, newsletter_published")
       .eq("id", postId)
       .eq("board_id", id)
       .maybeSingle(),
@@ -56,6 +56,7 @@ export default async function AdminBoardPostEditPage({ params, searchParams }: P
         categories={categories}
         error={error}
         submitLabel="수정 완료"
+        showNewsletterToggle={board.column_only}
       />
     </div>
   );

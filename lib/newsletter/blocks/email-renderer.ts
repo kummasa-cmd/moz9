@@ -1,6 +1,6 @@
 import { newsletterConfig, getNewsletterPostFeedbackUrl } from "../config";
 import type { AdBanner } from "../types";
-import { groupBlocksBySourcePost, type ContentBlock } from "./types";
+import { groupBlocksBySourcePost, getSectionAuthorName, type ContentBlock } from "./types";
 
 const FONT_STACK = "'Pretendard', 'Inter', -apple-system, sans-serif";
 const TEXT_COLOR = "#1A1A2E";
@@ -58,6 +58,11 @@ function renderAdBanner(banner: AdBanner | undefined): string {
   return `<a href="${escapeHtml(banner.linkUrl)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(banner.imageUrl)}" alt="${escapeHtml(banner.name)}" style="max-width:100%;display:block;margin:0 0 16px;border-radius:8px;" /></a>`;
 }
 
+function renderCopyrightNotice(authorName: string | null): string {
+  const who = authorName ? `${escapeHtml(authorName)}님` : "작성자";
+  return `<p style="margin:0 0 10px;font-family:${FONT_STACK};font-size:12px;line-height:1.6;color:#9CA3AF;">이 글의 저작권은 ${who}에게 있으며, 사전 동의 없이 무단으로 복제·전재·재배포하거나 변형할 수 없습니다.</p>`;
+}
+
 // Per-post (게시물별) 좋았어요/아쉬워요 — one widget per imported board-post
 // section (column/series/info/ad boards, ad posts included), separate from
 // the whole-newsletter feedback in renderEmailFooterActions (lib/newsletter/email.ts).
@@ -107,7 +112,11 @@ export function renderBlocksToHtml(
       if (group.kind === "single") return renderBlock(group.block, options);
 
       const body = group.blocks.map((block) => renderBlock(block, options)).join("\n");
-      return body + renderPostFeedback(options.newsletterId, options.slug, group.sourcePostId);
+      return (
+        body +
+        renderCopyrightNotice(getSectionAuthorName(group.blocks)) +
+        renderPostFeedback(options.newsletterId, options.slug, group.sourcePostId)
+      );
     })
     .join("\n");
 }
