@@ -120,7 +120,7 @@ export default async function AdminNewsletterPromoListPage({ searchParams }: Pro
         deleteNewslettersAction={deleteNewsletters}
         cancelCampaignAction={cancelCampaign}
         sendCampaignNowAction={sendCampaignNow}
-        editHref={(id) => `/admin/site/newsletter/promo/${id}`}
+        editBasePath="/admin/site/newsletter/promo"
         sendConfirmText="지금 바로 등록된 대상자 전체에게 발송하시겠습니까?"
       />
     </div>

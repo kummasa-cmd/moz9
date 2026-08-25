@@ -58,8 +58,10 @@ type Props = {
   sendCampaignNowAction: (formData: FormData) => Promise<void>;
   // Overridable so the promotional-newsletter list (app/admin/(protected)/
   // site/newsletter/promo/list) can reuse this table and point "수정" at
-  // /promo/[id] and the send-now confirm at the prospect list instead.
-  editHref?: (id: string) => string;
+  // /promo/[id] instead — a plain string, not a function, since Server
+  // Component props crossing into this Client Component must be
+  // serializable (a closure isn't a Server Action and can't be passed).
+  editBasePath?: string;
   sendConfirmText?: string;
 };
 
@@ -72,7 +74,7 @@ export default function NewsletterSendTable({
   deleteNewslettersAction,
   cancelCampaignAction,
   sendCampaignNowAction,
-  editHref = (id) => `/admin/site/newsletter/manage/${id}`,
+  editBasePath = "/admin/site/newsletter/manage",
   sendConfirmText = "지금 바로 구독자 전체에게 발송하시겠습니까?",
 }: Props) {
   const router = useRouter();
@@ -236,7 +238,7 @@ export default function NewsletterSendTable({
                       <Eye size={15} />
                     </Link>
                     <Link
-                      href={editHref(n.id)}
+                      href={`${editBasePath}/${n.id}`}
                       className="text-muted-foreground hover:text-primary transition-colors"
                       aria-label="수정"
                     >
