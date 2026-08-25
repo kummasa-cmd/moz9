@@ -81,6 +81,20 @@ export default async function NewsletterDetailPage({ params, searchParams }: Pro
       <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-3">{newsletter.title}</h1>
       <p className="text-sm text-muted-foreground mb-10">조회 {newsletter.viewCount.toLocaleString()}</p>
 
+      {newsletter.newsletterType === "PROMOTIONAL" && (
+        <div className="mb-10 rounded-xl bg-primary/5 p-6 text-center">
+          <p className="text-sm text-foreground mb-3">
+            이 뉴스레터가 마음에 드셨다면, 새 소식을 이메일로 계속 받아보세요.
+          </p>
+          <Link
+            href="/newsletter/subscribe"
+            className="inline-flex items-center justify-center rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
+          >
+            지금 구독하기
+          </Link>
+        </div>
+      )}
+
       <NewsletterBlocks
         blocks={newsletter.blocks}
         banners={banners}

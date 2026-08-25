@@ -19,6 +19,11 @@ export const SUBSCRIBER_SOURCE_LABEL: Record<string, string> = {
   CONTACT_FORM: "상담폼",
 };
 
+export const PROSPECT_SOURCE_LABEL: Record<string, string> = {
+  MANUAL: "수동등록",
+  IMPORT: "일괄등록",
+};
+
 export const CAMPAIGN_SEND_TYPE_LABEL: Record<string, string> = {
   IMMEDIATE: "즉시발송",
   SCHEDULED: "선택일발송",

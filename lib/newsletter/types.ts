@@ -18,6 +18,13 @@ export type Subscriber = {
 
 export type NewsletterStatus = "DRAFT" | "READY" | "PUBLISHED" | "ARCHIVED";
 
+// REGULAR: subscriber-facing newsletter (existing flow). PROMOTIONAL: sent to
+// admin-curated prospects to grow the subscriber base — see
+// lib/newsletter/scheduler.ts::processCampaign and app/admin/(protected)/
+// site/newsletter/promo/*. Promotional sends never record board-post
+// newsletter usage and never get an issue number.
+export type NewsletterType = "REGULAR" | "PROMOTIONAL";
+
 export type Newsletter = {
   id: string;
   title: string;
@@ -26,12 +33,27 @@ export type Newsletter = {
   preheader: string | null;
   thumbnailUrl: string | null;
   status: NewsletterStatus;
+  newsletterType: NewsletterType;
   blocks: ContentBlock[];
   viewCount: number;
   likeCount: number;
   dislikeCount: number;
   issueNumber: number | null;
   publishedAt: string | null;
+  createdAt: string;
+};
+
+export type ProspectSource = "MANUAL" | "IMPORT";
+
+// A promotional-newsletter recipient who isn't (yet) a real subscriber.
+// Shares the { id, email, unsubscribeToken } shape with Subscriber so
+// scheduler.ts can send to either audience through the same code path.
+export type Prospect = {
+  id: string;
+  email: string;
+  name: string | null;
+  source: ProspectSource;
+  unsubscribeToken: string;
   createdAt: string;
 };
 

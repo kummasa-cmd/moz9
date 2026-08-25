@@ -56,6 +56,11 @@ type Props = {
   deleteNewslettersAction: (formData: FormData) => Promise<void>;
   cancelCampaignAction: (formData: FormData) => Promise<void>;
   sendCampaignNowAction: (formData: FormData) => Promise<void>;
+  // Overridable so the promotional-newsletter list (app/admin/(protected)/
+  // site/newsletter/promo/list) can reuse this table and point "수정" at
+  // /promo/[id] and the send-now confirm at the prospect list instead.
+  editHref?: (id: string) => string;
+  sendConfirmText?: string;
 };
 
 export default function NewsletterSendTable({
@@ -67,6 +72,8 @@ export default function NewsletterSendTable({
   deleteNewslettersAction,
   cancelCampaignAction,
   sendCampaignNowAction,
+  editHref = (id) => `/admin/site/newsletter/manage/${id}`,
+  sendConfirmText = "지금 바로 구독자 전체에게 발송하시겠습니까?",
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -193,7 +200,7 @@ export default function NewsletterSendTable({
                         <form
                           action={sendCampaignNowAction}
                           onSubmit={(e) => {
-                            if (!window.confirm("지금 바로 구독자 전체에게 발송하시겠습니까?")) {
+                            if (!window.confirm(sendConfirmText)) {
                               e.preventDefault();
                             }
                           }}
@@ -229,7 +236,7 @@ export default function NewsletterSendTable({
                       <Eye size={15} />
                     </Link>
                     <Link
-                      href={`/admin/site/newsletter/manage/${n.id}`}
+                      href={editHref(n.id)}
                       className="text-muted-foreground hover:text-primary transition-colors"
                       aria-label="수정"
                     >

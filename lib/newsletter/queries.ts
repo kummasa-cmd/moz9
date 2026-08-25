@@ -1,14 +1,16 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ContentBlock } from "./blocks/types";
-import type { AdBanner, Newsletter, NewsletterTemplate, Subscriber, SubscriberSource } from "./types";
+import type { AdBanner, Newsletter, NewsletterTemplate, Prospect, Subscriber, SubscriberSource } from "./types";
 
 const NEWSLETTER_COLUMNS =
-  "id, title, slug, subject, preheader, thumbnail_url, status, blocks, view_count, like_count, dislike_count, issue_number, published_at, created_at";
+  "id, title, slug, subject, preheader, thumbnail_url, status, newsletter_type, blocks, view_count, like_count, dislike_count, issue_number, published_at, created_at";
 
 const AD_BANNER_COLUMNS = "id, name, image_url, link_url, position, start_date, end_date, is_active";
 
 const SUBSCRIBER_COLUMNS =
   "id, email, name, member_id, source, status, tags, unsubscribe_token, subscribed_at, unsubscribed_at";
+
+const PROSPECT_COLUMNS = "id, email, name, source, unsubscribe_token, created_at";
 
 function mapNewsletter(row: Record<string, unknown>): Newsletter {
   return {
@@ -19,12 +21,24 @@ function mapNewsletter(row: Record<string, unknown>): Newsletter {
     preheader: (row.preheader as string | null) ?? null,
     thumbnailUrl: (row.thumbnail_url as string | null) ?? null,
     status: row.status as Newsletter["status"],
+    newsletterType: (row.newsletter_type as Newsletter["newsletterType"] | null) ?? "REGULAR",
     blocks: (row.blocks as ContentBlock[] | null) ?? [],
     viewCount: (row.view_count as number | null) ?? 0,
     likeCount: (row.like_count as number | null) ?? 0,
     dislikeCount: (row.dislike_count as number | null) ?? 0,
     issueNumber: (row.issue_number as number | null) ?? null,
     publishedAt: (row.published_at as string | null) ?? null,
+    createdAt: row.created_at as string,
+  };
+}
+
+function mapProspect(row: Record<string, unknown>): Prospect {
+  return {
+    id: row.id as string,
+    email: row.email as string,
+    name: (row.name as string | null) ?? null,
+    source: row.source as Prospect["source"],
+    unsubscribeToken: row.unsubscribe_token as string,
     createdAt: row.created_at as string,
   };
 }
@@ -109,6 +123,9 @@ export async function getPublishedNewsletters(limit = 20): Promise<Newsletter[]>
     .from("newsletters")
     .select(NEWSLETTER_COLUMNS)
     .eq("status", "PUBLISHED")
+    // Promotional newsletters are cold outreach aimed at growing the
+    // subscriber base — they don't belong in the reader-facing archive.
+    .eq("newsletter_type", "REGULAR")
     .order("published_at", { ascending: false });
 
   const visible = await filterOutUnsentScheduled((data ?? []).map(mapNewsletter));
@@ -222,12 +239,32 @@ export async function subscribe(input: SubscribeInput): Promise<SubscribeResult>
   return { ok: true, alreadySubscribed: false };
 }
 
+// Global do-not-contact list, shared by both the regular and promotional
+// newsletter send paths (getTargetSubscribers / getTargetProspects below) —
+// once an email lands here, nothing gets sent to it again either way.
+async function addToSuppressionList(email: string): Promise<void> {
+  const db = createAdminClient();
+  await db
+    .from("newsletter_suppressions")
+    .upsert({ email }, { onConflict: "email", ignoreDuplicates: true });
+}
+
+async function getSuppressedEmailSet(): Promise<Set<string>> {
+  const db = createAdminClient();
+  const { data } = await db.from("newsletter_suppressions").select("email");
+  return new Set((data ?? []).map((row) => row.email as string));
+}
+
 export type UnsubscribeResult = { ok: true; email: string } | { ok: false; error: string };
 
+// A token may belong to a real subscriber or to a promotional-newsletter
+// prospect — both use the same unsubscribe link/page, so this checks both
+// tables and, either way, adds the email to newsletter_suppressions so no
+// future newsletter (regular or promotional) is sent to it again.
 export async function unsubscribeByToken(token: string): Promise<UnsubscribeResult> {
   const db = createAdminClient();
 
-  const { data, error } = await db
+  const { data: subscriber, error } = await db
     .from("newsletter_subscribers")
     .update({ status: "UNSUBSCRIBED", unsubscribed_at: new Date().toISOString() })
     .eq("unsubscribe_token", token)
@@ -236,8 +273,24 @@ export async function unsubscribeByToken(token: string): Promise<UnsubscribeResu
     .maybeSingle();
 
   if (error) return { ok: false, error: error.message };
-  if (!data) return { ok: false, error: "이미 처리되었거나 유효하지 않은 링크입니다." };
-  return { ok: true, email: data.email as string };
+
+  if (subscriber) {
+    await addToSuppressionList(subscriber.email as string);
+    return { ok: true, email: subscriber.email as string };
+  }
+
+  const { data: prospect } = await db
+    .from("newsletter_prospects")
+    .select("email")
+    .eq("unsubscribe_token", token)
+    .maybeSingle();
+
+  if (prospect) {
+    await addToSuppressionList(prospect.email as string);
+    return { ok: true, email: prospect.email as string };
+  }
+
+  return { ok: false, error: "이미 처리되었거나 유효하지 않은 링크입니다." };
 }
 
 export async function getSubscriberByEmail(email: string): Promise<Subscriber | null> {
@@ -262,8 +315,19 @@ export async function getTargetSubscribers(campaign: {
     query = query.overlaps("tags", campaign.targetTags);
   }
 
-  const { data } = await query;
-  return (data ?? []).map(mapSubscriber);
+  const [{ data }, suppressed] = await Promise.all([query, getSuppressedEmailSet()]);
+  return (data ?? []).map(mapSubscriber).filter((s) => !suppressed.has(s.email));
+}
+
+// Recipients for a PROSPECTS-audience campaign (promotional newsletter) —
+// every registered prospect, minus anyone who has unsubscribed since.
+export async function getTargetProspects(): Promise<Prospect[]> {
+  const db = createAdminClient();
+  const [{ data }, suppressed] = await Promise.all([
+    db.from("newsletter_prospects").select(PROSPECT_COLUMNS),
+    getSuppressedEmailSet(),
+  ]);
+  return (data ?? []).map(mapProspect).filter((p) => !suppressed.has(p.email));
 }
 
 const COLUMN_BOARD_SLUGS = ["column", "series", "info", "ad"];
@@ -293,7 +357,7 @@ export async function getColumnBoardPosts(): Promise<BoardPostOption[]> {
   const { data: posts } = await db
     .from("board_posts")
     .select(
-      "id, title, content, board_id, user_id, status, newsletter_use_count, newsletter_last_used_at, created_at",
+      "id, title, content, board_id, user_id, author, status, newsletter_use_count, newsletter_last_used_at, created_at",
     )
     .in(
       "board_id",
@@ -321,6 +385,7 @@ export async function getColumnBoardPosts(): Promise<BoardPostOption[]> {
   return (posts ?? []).map((p) => {
     const userId = p.user_id as string | null;
     const member = userId ? memberByUserId.get(userId) : undefined;
+    const authorText = p.author as string | null;
 
     return {
       id: p.id as string,
@@ -331,9 +396,14 @@ export async function getColumnBoardPosts(): Promise<BoardPostOption[]> {
       newsletterUseCount: (p.newsletter_use_count as number | null) ?? 0,
       newsletterLastUsedAt: (p.newsletter_last_used_at as string | null) ?? null,
       createdAt: p.created_at as string,
+      // Member-authored posts get a profile (nickname + avatar); admin-entered
+      // posts fall back to the free-text `author` field so every imported post
+      // still carries visible attribution in the newsletter.
       author: userId
         ? { name: member?.nickname ?? "익명", avatarUrl: member?.avatarUrl ?? null }
-        : null,
+        : authorText
+          ? { name: authorText, avatarUrl: null }
+          : null,
     };
   });
 }

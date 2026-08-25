@@ -42,6 +42,20 @@ function renderEmailHeaderMeta(meta: { publishedAt: string | null; issueNumber: 
       </div>`;
 }
 
+// Promotional-newsletter-only: a prominent CTA up top, since the whole point
+// of this send is growing the subscriber base — the small "구독하기" link in
+// the header/footer meta bar (shared with the regular newsletter) isn't
+// enough on its own here.
+function renderPromoSubscribeCta(): string {
+  return `
+      <div style="margin:0 0 24px;text-align:center;padding:20px;background:#F5F7FF;border-radius:10px;">
+        <p style="margin:0 0 12px;font-family:'Pretendard','Inter',-apple-system,sans-serif;font-size:14px;color:#1A1A2E;">
+          이 뉴스레터가 마음에 드셨다면, 새 소식을 이메일로 계속 받아보세요.
+        </p>
+        <a href="${getNewsletterSubscribeUrl()}" style="display:inline-block;padding:11px 24px;border-radius:6px;background:#3B5BFF;color:#ffffff;font-family:'Pretendard','Inter',-apple-system,sans-serif;font-size:14px;font-weight:700;text-decoration:none;">지금 구독하기</a>
+      </div>`;
+}
+
 function renderEmailFooterActions(newsletterId: string, slug: string): string {
   const likeUrl = getNewsletterFeedbackUrl(newsletterId, slug, "like");
   const dislikeUrl = getNewsletterFeedbackUrl(newsletterId, slug, "dislike");
@@ -65,7 +79,13 @@ function renderEmailFooterActions(newsletterId: string, slug: string): string {
 
 export function buildEmailTemplate(
   bodyHtml: string,
-  meta: { newsletterId: string; slug: string; publishedAt: string | null; issueNumber: number | null },
+  meta: {
+    newsletterId: string;
+    slug: string;
+    publishedAt: string | null;
+    issueNumber: number | null;
+    isPromotional?: boolean;
+  },
 ): string {
   return `<!doctype html>
 <html>
@@ -76,6 +96,7 @@ export function buildEmailTemplate(
   <body style="margin:0;padding:24px;background:#f4f4f5;">
     <div style="max-width:600px;margin:0 auto;background:#ffffff;padding:32px;border-radius:12px;">
       ${renderEmailHeaderMeta({ publishedAt: meta.publishedAt, issueNumber: meta.issueNumber })}
+      ${meta.isPromotional ? renderPromoSubscribeCta() : ""}
       ${bodyHtml}
       ${renderEmailFooterActions(meta.newsletterId, meta.slug)}
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:32px 0 16px;" />
@@ -94,7 +115,13 @@ export function buildEmailTemplate(
 // with harmless stand-in links since there's no real delivery/tracking token yet.
 export function buildPreviewEmailHtml(
   bodyHtml: string,
-  meta: { newsletterId: string; slug: string; publishedAt: string | null; issueNumber: number | null },
+  meta: {
+    newsletterId: string;
+    slug: string;
+    publishedAt: string | null;
+    issueNumber: number | null;
+    isPromotional?: boolean;
+  },
 ): string {
   return buildEmailTemplate(bodyHtml, meta)
     .replaceAll(UNSUBSCRIBE_URL_PLACEHOLDER, "#")

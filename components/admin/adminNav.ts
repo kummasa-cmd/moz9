@@ -85,6 +85,7 @@ export const adminNav: AdminNavItem[] = [
         children: [
           { label: "뉴스레터 발송 관리", href: "/admin/site/newsletter/manage" },
           { label: "뉴스레터 발송 목록", href: "/admin/site/newsletter/list" },
+          { label: "홍보 뉴스레터", href: "/admin/site/newsletter/promo/list" },
           { label: "통계", href: "/admin/site/newsletter/analytics" },
         ],
       },

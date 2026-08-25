@@ -11,6 +11,7 @@ export async function deleteNewsletter(formData: FormData) {
   await supabase.from("newsletters").delete().eq("id", id);
 
   revalidatePath("/admin/site/newsletter/list");
+  revalidatePath("/admin/site/newsletter/promo/list");
   revalidatePath("/newsletter");
 }
 
@@ -22,6 +23,7 @@ export async function deleteNewsletters(formData: FormData) {
   await supabase.from("newsletters").delete().in("id", ids);
 
   revalidatePath("/admin/site/newsletter/list");
+  revalidatePath("/admin/site/newsletter/promo/list");
   revalidatePath("/newsletter");
 }
 
@@ -32,6 +34,7 @@ export async function cancelCampaign(formData: FormData) {
   await supabase.from("newsletter_campaigns").update({ status: "CANCELLED" }).eq("id", id);
 
   revalidatePath("/admin/site/newsletter/list");
+  revalidatePath("/admin/site/newsletter/promo/list");
 }
 
 export async function sendCampaignNow(formData: FormData) {
@@ -41,4 +44,5 @@ export async function sendCampaignNow(formData: FormData) {
   await processCampaign(id);
 
   revalidatePath("/admin/site/newsletter/list");
+  revalidatePath("/admin/site/newsletter/promo/list");
 }

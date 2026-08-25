@@ -51,6 +51,23 @@ export type SubscriberRow = {
   subscribedAt: string;
 };
 
+export type ProspectRow = {
+  id: string;
+  email: string;
+  name: string | null;
+  source: string;
+  createdAt: string;
+};
+
+// A do-not-contact entry — blocks both the regular and promotional newsletter
+// send paths (see lib/newsletter/queries.ts::getSuppressedEmailSet). Deleting
+// one here lifts the block, letting that email receive newsletters again.
+export type SuppressionRow = {
+  id: string;
+  email: string;
+  unsubscribedAt: string;
+};
+
 export type BannerRow = {
   id: string;
   name: string;

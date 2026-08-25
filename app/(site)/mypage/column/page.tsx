@@ -1,4 +1,5 @@
-import { FileText } from "lucide-react";
+import Link from "next/link";
+import { FileText, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import ColumnPostsList from "./ColumnPostsList";
@@ -36,7 +37,7 @@ export default async function MyColumnPostsPage({ searchParams }: Props) {
   const { data: posts, count } = boardIds.length
     ? await admin
         .from("board_posts")
-        .select("id, title, created_at, board_id, category_id", { count: "exact" })
+        .select("id, title, created_at, board_id, category_id, newsletter_published", { count: "exact" })
         .in("board_id", boardIds)
         .eq("user_id", user!.id)
         .eq("status", "게시중")
@@ -65,12 +66,22 @@ export default async function MyColumnPostsPage({ searchParams }: Props) {
       category: p.category_id ? categoryMap.get(p.category_id) ?? "-" : "-",
       title: p.title,
       createdAt: p.created_at,
+      newsletterPublished: p.newsletter_published ?? false,
     };
   });
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-bold text-foreground">컬럼 게시판</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-bold text-foreground">컬럼 게시판</h1>
+        <Link
+          href="/community"
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
+        >
+          <Pencil size={14} />
+          글쓰러가기
+        </Link>
+      </div>
 
       {rows.length > 0 ? (
         <ColumnPostsList posts={rows} page={page} limit={limit} totalPages={totalPages} />

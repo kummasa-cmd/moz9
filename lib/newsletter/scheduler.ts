@@ -4,6 +4,7 @@ import { renderBlocksToHtml } from "./blocks/email-renderer";
 import {
   assignNewsletterIssueNumber,
   getAdBannersByIds,
+  getTargetProspects,
   getTargetSubscribers,
   recordBoardPostNewsletterUsage,
 } from "./queries";
@@ -31,11 +32,13 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
 
   const { data: campaign } = await db
     .from("newsletter_campaigns")
-    .select("id, newsletter_id, send_type, target_all, target_tags, range_end")
+    .select("id, newsletter_id, send_type, target_all, target_tags, range_end, audience")
     .eq("id", campaignId)
     .maybeSingle();
 
   if (!campaign) return { ok: false, error: "캠페인을 찾을 수 없습니다." };
+
+  const isPromo = campaign.audience === "PROSPECTS";
 
   const { data: newsletter } = await db
     .from("newsletters")
@@ -49,17 +52,21 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
     return { ok: false, error: "RESEND_API_KEY 또는 NEWSLETTER_SENDER_EMAIL이 설정되지 않았습니다." };
   }
 
-  const subscribers = await getTargetSubscribers({
-    targetAll: campaign.target_all,
-    targetTags: campaign.target_tags ?? [],
-  });
+  // Subscriber and Prospect are structurally compatible for send purposes —
+  // both carry { id, email, unsubscribeToken }.
+  const recipients: { id: string; email: string; unsubscribeToken: string }[] = isPromo
+    ? await getTargetProspects()
+    : await getTargetSubscribers({
+        targetAll: campaign.target_all,
+        targetTags: campaign.target_tags ?? [],
+      });
 
   await db
     .from("newsletter_campaigns")
-    .update({ status: "SENDING", total_recipients: subscribers.length })
+    .update({ status: "SENDING", total_recipients: recipients.length })
     .eq("id", campaignId);
 
-  if (subscribers.length === 0) {
+  if (recipients.length === 0) {
     await db
       .from("newsletter_campaigns")
       .update({
@@ -76,7 +83,9 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
   // Assigned here (before the email is composed) rather than after sending,
   // so the issue number embedded in the email itself is correct on the very
   // first real send — see assignNewsletterIssueNumber for the "실제 발행" rule.
-  const issueNumber = await assignNewsletterIssueNumber(newsletter.id);
+  // Promotional sends sit outside the numbered series entirely, so they never
+  // get one.
+  const issueNumber = isPromo ? null : await assignNewsletterIssueNumber(newsletter.id);
 
   const blocks = (newsletter.blocks as ContentBlock[] | null) ?? [];
   const banners = await getAdBannersByIds(getAdBannerIds(blocks));
@@ -91,21 +100,23 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
     slug: newsletter.slug,
     publishedAt: newsletter.published_at,
     issueNumber,
+    isPromotional: isPromo,
   });
 
-  const deliveryRows = subscribers.map((s) => ({
+  const deliveryRows = recipients.map((r) => ({
     campaign_id: campaignId,
-    subscriber_id: s.id,
-    email: s.email,
+    subscriber_id: isPromo ? null : r.id,
+    prospect_id: isPromo ? r.id : null,
+    email: r.email,
     status: "QUEUED",
   }));
 
   const { data: deliveries } = await db
     .from("newsletter_deliveries")
-    .upsert(deliveryRows, { onConflict: "campaign_id,subscriber_id" })
-    .select("id, subscriber_id, tracking_token");
+    .upsert(deliveryRows, { onConflict: isPromo ? "campaign_id,prospect_id" : "campaign_id,subscriber_id" })
+    .select("id, subscriber_id, prospect_id, tracking_token");
 
-  const subscriberById = new Map(subscribers.map((s) => [s.id, s]));
+  const recipientById = new Map(recipients.map((r) => [r.id, r]));
   const resend = getResendClient();
 
   let totalSent = 0;
@@ -113,15 +124,15 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
   for (const batch of chunk(deliveries ?? [], 100)) {
     const payload = batch
       .map((d) => {
-        const subscriber = subscriberById.get(d.subscriber_id);
-        if (!subscriber) return null;
+        const recipient = recipientById.get(isPromo ? d.prospect_id : d.subscriber_id);
+        if (!recipient) return null;
         const html = personalizeEmail(templateHtml, {
           trackingToken: d.tracking_token,
-          unsubscribeToken: subscriber.unsubscribeToken,
+          unsubscribeToken: recipient.unsubscribeToken,
         });
         return {
           from: `${newsletterConfig.senderName} <${newsletterConfig.senderEmail}>`,
-          to: subscriber.email,
+          to: recipient.email,
           subject: newsletter.subject,
           html,
         };
@@ -156,7 +167,7 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
     }
   }
 
-  const allFailed = totalSent === 0 && subscribers.length > 0;
+  const allFailed = totalSent === 0 && recipients.length > 0;
 
   await db
     .from("newsletter_campaigns")
@@ -168,7 +179,10 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
     })
     .eq("id", campaignId);
 
-  if (totalSent > 0) {
+  // Promotional sends don't count as "this post appeared in the newsletter" —
+  // that gate (board_posts.newsletter_published) is reserved for the real,
+  // subscriber-facing newsletter. See lib/community-auth.ts::canViewColumnPost.
+  if (totalSent > 0 && !isPromo) {
     await recordBoardPostNewsletterUsage(getSourcePostIds(blocks));
   }
 
@@ -176,7 +190,7 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
     return { ok: false, error: "이메일 발송에 모두 실패했습니다. Resend 발신 도메인 인증 상태를 확인해 주세요." };
   }
 
-  return { ok: true, sent: totalSent, recipients: subscribers.length };
+  return { ok: true, sent: totalSent, recipients: recipients.length };
 }
 
 export type DueCampaign = {
