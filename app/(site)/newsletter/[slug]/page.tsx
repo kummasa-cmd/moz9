@@ -90,7 +90,6 @@ export default async function NewsletterDetailPage({ params, searchParams }: Pro
         </Link>
       </div>
 
-      <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-3">{newsletter.title}</h1>
       <p className="text-sm text-muted-foreground mb-10">조회 {newsletter.viewCount.toLocaleString()}</p>
 
       {newsletter.newsletterType === "PROMOTIONAL" && (
