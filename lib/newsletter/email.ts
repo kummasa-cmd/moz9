@@ -18,6 +18,15 @@ export function getResendClient(): Resend {
 const OPEN_PIXEL_PLACEHOLDER = "__NEWSLETTER_OPEN_PIXEL__";
 const UNSUBSCRIBE_URL_PLACEHOLDER = "__NEWSLETTER_UNSUBSCRIBE_URL__";
 
+// Fixed masthead shown above every newsletter — mirrors the one on the web
+// reading page (app/(site)/newsletter/[slug]/page.tsx).
+function renderEmailMasthead(): string {
+  return `
+      <div style="margin:0 0 20px;">
+        <img src="${newsletterConfig.siteUrl}/images/letter_title.png" alt="뉴스레터" width="600" style="max-width:100%;display:block;border-radius:8px;" />
+      </div>`;
+}
+
 // Mirrors the top meta bar on the web reading page (app/(site)/newsletter/[slug]/page.tsx):
 // date | issue number | subscribe | archive.
 function renderEmailHeaderMeta(meta: { publishedAt: string | null; issueNumber: number | null }): string {
@@ -95,6 +104,7 @@ export function buildEmailTemplate(
   </head>
   <body style="margin:0;padding:24px;background:#f4f4f5;">
     <div style="max-width:600px;margin:0 auto;background:#ffffff;padding:32px;border-radius:12px;">
+      ${renderEmailMasthead()}
       ${renderEmailHeaderMeta({ publishedAt: meta.publishedAt, issueNumber: meta.issueNumber })}
       ${meta.isPromotional ? renderPromoSubscribeCta() : ""}
       ${bodyHtml}

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { headers, cookies } from "next/headers";
+import Image from "next/image";
 import Link from "next/link";
 import {
   getPublishedNewsletterBySlug,
@@ -52,6 +53,17 @@ export default async function NewsletterDetailPage({ params, searchParams }: Pro
 
   return (
     <article className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
+      <Link href="/newsletter" className="block mb-8">
+        <Image
+          src="/images/letter_title.png"
+          alt="뉴스레터"
+          width={1600}
+          height={500}
+          className="w-full h-auto rounded-xl"
+          priority
+        />
+      </Link>
+
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground mb-8 pb-4 border-b border-border">
         {newsletter.publishedAt && (
           <span>{new Date(newsletter.publishedAt).toLocaleDateString("ko-KR")}</span>
