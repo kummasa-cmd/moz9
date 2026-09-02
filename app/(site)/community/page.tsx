@@ -43,10 +43,7 @@ export default async function CommunityPage() {
     .eq("is_visible", true)
     .order("sort_order", { ascending: true });
 
-  // Column-only boards (컬럼/연재/정보/광고) are omitted entirely for logged-out
-  // visitors — not shown as locked placeholders, just absent. Any logged-in
-  // member can view them; writing still requires column-member status.
-  const boards = (allBoards ?? []).filter((b) => !b.column_only || admin || user);
+  const boards = allBoards ?? [];
 
   if (boards.length === 0) {
     return (
@@ -83,6 +80,12 @@ export default async function CommunityPage() {
         }
       }
 
+      if (board.column_only && !admin) {
+        query = user
+          ? query.or(`newsletter_published.eq.true,user_id.eq.${user.id}`)
+          : query.eq("newsletter_published", true);
+      }
+
       const { data: posts } = await query;
       const canWrite =
         admin || (board.allow_user_write && user !== null && (!board.column_only || columnMember));
@@ -115,7 +118,7 @@ export default async function CommunityPage() {
         <div className="mb-12">
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             <h2 className="text-lg font-bold text-foreground">컬럼 · 연재 · 정보 · 광고</h2>
-            <span className="text-xs text-muted-foreground">로그인 회원 전용 · 글쓰기는 컬럼 회원만 가능</span>
+            <span className="text-xs text-muted-foreground">뉴스레터에 소개된 글만 공개 · 글쓰기는 컬럼 회원만 가능</span>
             <Link
               href="/community/column-guide"
               className="inline-flex items-center gap-1 text-xs font-medium text-primary border border-primary/30 rounded-full px-2.5 py-1 hover:bg-primary/10 transition-colors"
