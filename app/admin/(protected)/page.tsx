@@ -87,7 +87,12 @@ export default async function AdminDashboardPage() {
 
   const stats = [
     { label: "전체 회원", value: `${memberCount ?? 0}명`, icon: Users },
-    { label: "전체 주문", value: `${orderCount ?? 0}건`, icon: ShoppingCart },
+    {
+      label: "전체 주문",
+      value: `${orderCount ?? 0}건`,
+      icon: ShoppingCart,
+      href: "/admin/orders",
+    },
     { label: "미답변 상담", value: `${consultationCount ?? 0}건`, icon: MessageSquare },
     {
       label: "뉴스레터 구독자수",

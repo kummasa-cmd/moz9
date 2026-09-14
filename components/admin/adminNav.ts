@@ -29,14 +29,6 @@ export const adminNav: AdminNavItem[] = [
     ],
   },
   {
-    label: "상품관리",
-    href: "/admin/products",
-    children: [
-      { label: "상품목록", href: "/admin/products" },
-      { label: "상품등록", href: "/admin/products/new" },
-    ],
-  },
-  {
     label: "결제관리",
     href: "/admin/orders",
     children: [
