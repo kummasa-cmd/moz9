@@ -48,7 +48,10 @@ export default async function AdminDashboardPage() {
     supabase.from("members").select("*", { count: "exact", head: true }),
     supabase.from("orders").select("*", { count: "exact", head: true }),
     supabase.from("consultations").select("*", { count: "exact", head: true }).eq("status", "미답변"),
-    supabase.from("newsletter_subscribers").select("*", { count: "exact", head: true }),
+    supabase
+      .from("newsletter_subscribers")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "SUBSCRIBED"),
     supabase
       .from("members")
       .select("name, email, status, created_at")
@@ -87,7 +90,7 @@ export default async function AdminDashboardPage() {
     { label: "전체 주문", value: `${orderCount ?? 0}건`, icon: ShoppingCart },
     { label: "미답변 상담", value: `${consultationCount ?? 0}건`, icon: MessageSquare },
     {
-      label: "뉴스레터 구독회원",
+      label: "뉴스레터 구독자수",
       value: `${subscriberCount ?? 0}명`,
       icon: Mail,
       href: "/admin/site/newsletter/subscribers",
