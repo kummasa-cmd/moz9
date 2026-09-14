@@ -57,6 +57,16 @@ export const adminNav: AdminNavItem[] = [
     ],
   },
   {
+    label: "뉴스레터 관리",
+    href: "/admin/site/newsletter/list",
+    children: [
+      { label: "뉴스레터 발송 관리", href: "/admin/site/newsletter/manage" },
+      { label: "뉴스레터 발송 목록", href: "/admin/site/newsletter/list" },
+      { label: "홍보 뉴스레터", href: "/admin/site/newsletter/promo/list" },
+      { label: "통계", href: "/admin/site/newsletter/analytics" },
+    ],
+  },
+  {
     label: "통계",
     href: "/admin/stats/members",
     children: [
@@ -71,16 +81,6 @@ export const adminNav: AdminNavItem[] = [
     children: [
       { label: "메인관리", href: "/admin/site/main" },
       { label: "게시판관리", href: "/admin/site/board" },
-      {
-        label: "뉴스레터 관리",
-        href: "/admin/site/newsletter/list",
-        children: [
-          { label: "뉴스레터 발송 관리", href: "/admin/site/newsletter/manage" },
-          { label: "뉴스레터 발송 목록", href: "/admin/site/newsletter/list" },
-          { label: "홍보 뉴스레터", href: "/admin/site/newsletter/promo/list" },
-          { label: "통계", href: "/admin/site/newsletter/analytics" },
-        ],
-      },
       { label: "관리자관리", href: "/admin/site/admins" },
     ],
   },
