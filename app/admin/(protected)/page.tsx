@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, Package, ShoppingCart, MessageSquare } from "lucide-react";
+import { Users, Mail, ShoppingCart, MessageSquare } from "lucide-react";
 import StatCard from "@/components/admin/StatCard";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,12 +11,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { SUBSCRIBER_STATUS_LABEL } from "./site/newsletter/labels";
 
 function statusVariant(status: string) {
   if (["정상", "결제완료", "입금완료", "답변완료", "판매중", "작업완료"].includes(status)) return "default" as const;
   if (["미답변", "탈퇴", "작업요청", "환불"].includes(status)) return "destructive" as const;
   if (status === "작업중") return "secondary" as const;
   if (status === "반려") return "outline" as const;
+  return "secondary" as const;
+}
+
+function subscriberStatusVariant(status: string) {
+  if (status === "SUBSCRIBED") return "default" as const;
+  if (status === "BOUNCED") return "destructive" as const;
   return "secondary" as const;
 }
 
@@ -31,16 +38,17 @@ export default async function AdminDashboardPage() {
     { count: memberCount },
     { count: orderCount },
     { count: consultationCount },
-    { count: productCount },
+    { count: subscriberCount },
     { data: recentMembers },
     { data: recentOrders },
     { data: recentConsultations },
     { data: recentPartnerPosts },
+    { data: recentSubscribers },
   ] = await Promise.all([
     supabase.from("members").select("*", { count: "exact", head: true }),
     supabase.from("orders").select("*", { count: "exact", head: true }),
     supabase.from("consultations").select("*", { count: "exact", head: true }).eq("status", "미답변"),
-    supabase.from("products").select("*", { count: "exact", head: true }),
+    supabase.from("newsletter_subscribers").select("*", { count: "exact", head: true }),
     supabase
       .from("members")
       .select("name, email, status, created_at")
@@ -61,6 +69,11 @@ export default async function AdminDashboardPage() {
       .select("id, member_id, title, status, created_at")
       .order("created_at", { ascending: false })
       .limit(5),
+    supabase
+      .from("newsletter_subscribers")
+      .select("id, email, name, status, subscribed_at")
+      .order("subscribed_at", { ascending: false })
+      .limit(3),
   ]);
 
   const partnerMemberIds = [...new Set((recentPartnerPosts ?? []).map((p) => p.member_id))];
@@ -73,7 +86,12 @@ export default async function AdminDashboardPage() {
     { label: "전체 회원", value: `${memberCount ?? 0}명`, icon: Users },
     { label: "전체 주문", value: `${orderCount ?? 0}건`, icon: ShoppingCart },
     { label: "미답변 상담", value: `${consultationCount ?? 0}건`, icon: MessageSquare },
-    { label: "등록 상품", value: `${productCount ?? 0}개`, icon: Package },
+    {
+      label: "뉴스레터 구독회원",
+      value: `${subscriberCount ?? 0}명`,
+      icon: Mail,
+      href: "/admin/site/newsletter/subscribers",
+    },
   ];
 
   return (
@@ -84,7 +102,7 @@ export default async function AdminDashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* Recent members */}
         <div className="rounded-xl border border-border bg-white p-5">
           <div className="flex items-center justify-between mb-4">
@@ -97,7 +115,6 @@ export default async function AdminDashboardPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>이름</TableHead>
-                <TableHead>이메일</TableHead>
                 <TableHead>가입일</TableHead>
                 <TableHead>상태</TableHead>
               </TableRow>
@@ -106,7 +123,6 @@ export default async function AdminDashboardPage() {
               {(recentMembers ?? []).map((m) => (
                 <TableRow key={m.email}>
                   <TableCell className="font-medium">{m.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{m.email}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {new Date(m.created_at).toLocaleDateString("ko-KR")}
                   </TableCell>
@@ -117,7 +133,51 @@ export default async function AdminDashboardPage() {
               ))}
               {recentMembers && recentMembers.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                    데이터가 없습니다.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Recent newsletter subscribers */}
+        <div className="rounded-xl border border-border bg-white p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-foreground">최신 뉴스레터 구독자</h3>
+            <Link
+              href="/admin/site/newsletter/subscribers"
+              className="text-xs text-primary hover:underline"
+            >
+              전체보기
+            </Link>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>이메일</TableHead>
+                <TableHead>등록일</TableHead>
+                <TableHead>상태</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(recentSubscribers ?? []).map((s) => (
+                <TableRow key={s.id}>
+                  <TableCell className="font-medium">{s.name ?? s.email}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {new Date(s.subscribed_at).toLocaleDateString("ko-KR")}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={subscriberStatusVariant(s.status)}>
+                      {SUBSCRIBER_STATUS_LABEL[s.status] ?? s.status}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {recentSubscribers && recentSubscribers.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
                     데이터가 없습니다.
                   </TableCell>
                 </TableRow>
@@ -162,7 +222,9 @@ export default async function AdminDashboardPage() {
             </TableBody>
           </Table>
         </div>
+      </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent consultations */}
         <div className="rounded-xl border border-border bg-white p-5 lg:col-span-2">
           <div className="flex items-center justify-between mb-4">

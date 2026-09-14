@@ -1,8 +1,9 @@
-import { UserPlus, Upload } from "lucide-react";
+import { UserPlus, Upload, Mail } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import PageHeader from "@/components/admin/PageHeader";
+import StatCard from "@/components/admin/StatCard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   addSubscriber,
@@ -55,8 +56,12 @@ export default async function AdminNewsletterSubscribersPage({ searchParams }: P
     <div>
       <PageHeader
         title="구독자관리"
-        description={`전체 ${totalCount}명 (회원가입 여부와 무관하게 이메일 주소를 아는 모든 대상을 관리합니다)`}
+        description="회원가입 여부와 무관하게 이메일 주소를 아는 모든 대상을 관리합니다"
       />
+
+      <div className="max-w-xs mb-6">
+        <StatCard label="총 구독자수" value={`${totalCount}명`} icon={Mail} />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <form
