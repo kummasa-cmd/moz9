@@ -20,7 +20,7 @@ export default async function AdminBoardPostEditPage({ params, searchParams }: P
     supabase.from("boards").select("id, name, use_category, column_only").eq("id", id).maybeSingle(),
     supabase
       .from("board_posts")
-      .select("id, title, content, status, category_id, newsletter_published")
+      .select("id, title, content, status, category_id, author, published_at, newsletter_published")
       .eq("id", postId)
       .eq("board_id", id)
       .maybeSingle(),

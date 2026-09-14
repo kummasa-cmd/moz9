@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import PageHeader from "@/components/admin/PageHeader";
 import BoardPostEntryForm from "@/components/admin/BoardPostEntryForm";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAdminSession } from "@/lib/admin-auth";
 import { createBoardPost } from "../actions";
 
 type Props = {
@@ -16,11 +17,17 @@ export default async function AdminBoardPostNewPage({ params, searchParams }: Pr
   const { error } = await searchParams;
   const supabase = createAdminClient();
 
-  const { data: board } = await supabase
-    .from("boards")
-    .select("id, name, use_category, column_only")
-    .eq("id", id)
-    .maybeSingle();
+  const sessionAdminId = await getAdminSession();
+  const [{ data: board }, { data: sessionAdmin }] = await Promise.all([
+    supabase
+      .from("boards")
+      .select("id, name, use_category, column_only")
+      .eq("id", id)
+      .maybeSingle(),
+    sessionAdminId
+      ? supabase.from("admins").select("name").eq("id", sessionAdminId).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   if (!board) notFound();
 
@@ -48,6 +55,7 @@ export default async function AdminBoardPostNewPage({ params, searchParams }: Pr
       <PageHeader title="글쓰기" description={`${board.name} 게시판에 새 게시물을 작성합니다.`} />
       <BoardPostEntryForm
         action={createBoardPost.bind(null, board.id)}
+        defaultValues={{ author: sessionAdmin?.name ?? "" }}
         categories={categories}
         error={error}
         submitLabel="게시물 등록"
