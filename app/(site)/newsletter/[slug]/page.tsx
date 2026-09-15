@@ -125,7 +125,6 @@ export default async function NewsletterDetailPage({ params, searchParams }: Pro
         newsletterId={newsletter.id}
         slug={newsletter.slug}
         likeCount={newsletter.likeCount}
-        dislikeCount={newsletter.dislikeCount}
       />
     </article>
   );

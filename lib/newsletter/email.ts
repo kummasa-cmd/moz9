@@ -67,7 +67,6 @@ function renderPromoSubscribeCta(): string {
 
 function renderEmailFooterActions(newsletterId: string, slug: string): string {
   const likeUrl = getNewsletterFeedbackUrl(newsletterId, slug, "like");
-  const dislikeUrl = getNewsletterFeedbackUrl(newsletterId, slug, "dislike");
   const linkStyle =
     "display:inline-block;padding:9px 16px;border-radius:6px;font-family:'Pretendard','Inter',-apple-system,sans-serif;font-size:13px;font-weight:600;text-decoration:none;";
 
@@ -75,7 +74,6 @@ function renderEmailFooterActions(newsletterId: string, slug: string): string {
       <div style="margin:32px 0 0;text-align:center;">
         <p style="margin:0 0 10px;font-family:'Pretendard','Inter',-apple-system,sans-serif;font-size:13px;color:#6B7280;">이번 뉴스레터 어떠셨나요?</p>
         <a href="${likeUrl}" style="${linkStyle}background:#3B5BFF;color:#ffffff;margin:0 4px;">👍 좋았어요</a>
-        <a href="${dislikeUrl}" style="${linkStyle}background:transparent;color:#3B5BFF;border:1px solid #3B5BFF;margin:0 4px;">👎 아쉬워요</a>
       </div>
       <div style="margin:20px 0 0;text-align:center;">
         <a href="${getContactUrl()}" style="${linkStyle}background:transparent;color:#6B7280;border:1px solid #E5E7EB;margin:0 4px;">제휴·협업 문의</a>

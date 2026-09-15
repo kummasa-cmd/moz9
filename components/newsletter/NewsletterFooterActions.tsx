@@ -1,15 +1,14 @@
 import Link from "next/link";
-import { ThumbsUp, ThumbsDown, Handshake, Archive, Mail } from "lucide-react";
+import { ThumbsUp, Handshake, Archive, Mail } from "lucide-react";
 import { getNewsletterFeedbackUrl } from "@/lib/newsletter/config";
 
 type Props = {
   newsletterId: string;
   slug: string;
   likeCount: number;
-  dislikeCount: number;
 };
 
-export function NewsletterFooterActions({ newsletterId, slug, likeCount, dislikeCount }: Props) {
+export function NewsletterFooterActions({ newsletterId, slug, likeCount }: Props) {
   return (
     <div className="mt-12 pt-8 border-t border-border flex flex-col items-center gap-8">
       <div className="text-center">
@@ -21,13 +20,6 @@ export function NewsletterFooterActions({ newsletterId, slug, likeCount, dislike
           >
             <ThumbsUp size={14} />
             좋았어요 {likeCount > 0 && likeCount}
-          </Link>
-          <Link
-            href={getNewsletterFeedbackUrl(newsletterId, slug, "dislike")}
-            className="inline-flex items-center gap-1.5 rounded-md border border-primary px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
-          >
-            <ThumbsDown size={14} />
-            아쉬워요 {dislikeCount > 0 && dislikeCount}
           </Link>
         </div>
       </div>

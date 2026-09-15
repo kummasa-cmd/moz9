@@ -229,7 +229,7 @@ export default async function ColumnGuidePage() {
               <Link href="/newsletter" className="text-primary hover:underline">
                 이전뉴스 보기
               </Link>
-              &rdquo;에서 확인할 수 있고, 독자들이 하단의 좋아요 · 아쉬워요 버튼으로 반응을 남길 수
+              &rdquo;에서 확인할 수 있고, 독자들이 하단의 좋아요 버튼으로 반응을 남길 수
               있습니다.
             </p>
           </div>

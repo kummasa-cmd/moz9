@@ -133,16 +133,13 @@ function PostFeedbackView({
   justVoted: "like" | "dislike" | null;
 }) {
   const likeUrl = getNewsletterPostFeedbackUrl(newsletterId, slug, sourcePostId, "like");
-  const dislikeUrl = getNewsletterPostFeedbackUrl(newsletterId, slug, sourcePostId, "dislike");
 
   return (
     <div id={`post-${sourcePostId}`} className="flex flex-wrap items-center gap-2 pt-1">
       <span className="text-xs text-muted-foreground">이 글 어떠셨나요?</span>
       <PostFeedbackButtons
         likeUrl={likeUrl}
-        dislikeUrl={dislikeUrl}
         likeCount={counts?.likeCount ?? 0}
-        dislikeCount={counts?.dislikeCount ?? 0}
         votedType={votedType}
         justVoted={justVoted}
       />

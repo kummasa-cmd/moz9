@@ -63,19 +63,17 @@ function renderCopyrightNotice(authorName: string | null): string {
   return `<p style="margin:0 0 10px;font-family:${FONT_STACK};font-size:12px;line-height:1.6;color:#9CA3AF;">이 글의 저작권은 ${who}에게 있으며, 사전 동의 없이 무단으로 복제·전재·재배포하거나 변형할 수 없습니다.</p>`;
 }
 
-// Per-post (게시물별) 좋았어요/아쉬워요 — one widget per imported board-post
+// Per-post (게시물별) 좋았어요 — one widget per imported board-post
 // section (column/series/info/ad boards, ad posts included), separate from
 // the whole-newsletter feedback in renderEmailFooterActions (lib/newsletter/email.ts).
 function renderPostFeedback(newsletterId: string, slug: string, sourcePostId: string): string {
   const likeUrl = getNewsletterPostFeedbackUrl(newsletterId, slug, sourcePostId, "like");
-  const dislikeUrl = getNewsletterPostFeedbackUrl(newsletterId, slug, sourcePostId, "dislike");
   const linkStyle =
     "display:inline-block;padding:5px 12px;border-radius:999px;font-family:'Pretendard','Inter',-apple-system,sans-serif;font-size:12px;text-decoration:none;border:1px solid #E5E7EB;color:#6B7280;margin-right:6px;";
 
   return `<div style="margin:0 0 16px;">
     <span style="font-family:'Pretendard','Inter',-apple-system,sans-serif;font-size:12px;color:#6B7280;margin-right:6px;">이 글 어떠셨나요?</span>
     <a href="${likeUrl}" style="${linkStyle}">👍 좋았어요</a>
-    <a href="${dislikeUrl}" style="${linkStyle}">👎 아쉬워요</a>
   </div>`;
 }
 
