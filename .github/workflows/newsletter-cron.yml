@@ -1,0 +1,21 @@
+name: Newsletter scheduled send
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call send-due endpoint
+        run: |
+          status=$(curl -s -o response.txt -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://kumpark.com/api/cron/newsletter/send-due)
+          cat response.txt
+          if [ "$status" -ge 300 ]; then
+            echo "Request failed with status $status"
+            exit 1
+          fi

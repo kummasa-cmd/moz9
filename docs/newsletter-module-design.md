@@ -16,7 +16,7 @@
 | 멀티테넌시 | 모든 테이블에 `site_id` | **site_id 없음. 단일 테넌트 + 폴더 복사형 모듈** | 고객사마다 별도 Vercel 프로젝트 + 별도 Supabase 프로젝트를 쓰는 에이전시 구조이므로, DB를 공유하는 멀티테넌트보다 "모듈 폴더 복사 + `.env` 교체"가 실제 운영 방식과 맞고 단순하다. §8 참고. |
 | 회원 연동 | 별도 `Subscriber.userId` | **`newsletter_subscribers.member_id → auth.users`** | `consultations.member_id` (0004 마이그레이션)와 동일한 패턴. 회원가입 시 자동 링크, 비회원은 email만. |
 | 이메일 발송사 | Resend / SendGrid / SES 중 택1 | **Resend 확정** | 무료 티어로 테스트하기 쉽고, React Email과 궁합이 좋고 Vercel 배포에 최적화되어 있음. `resend`, `react-email`, `@react-email/components` 신규 설치 필요 (현재 미설치). |
-| 스케줄러 | 5분마다 Vercel Cron | **하루 1회 Vercel Cron (자정 KST 기준)** | Vercel **Hobby 플랜은 cron이 하루 1회 실행으로 제한**된다. "매일 자동발송/선택일 발송/기간 발송" 요구사항 자체가 일 단위이므로 하루 1회로 충분하다. 발송 정밀 시각(예: 매일 09:00)이 꼭 필요해지면 Pro 플랜 업그레이드 또는 Supabase `pg_cron`/QStash로 교체. |
+| 스케줄러 | 5분마다 Vercel Cron | **Vercel Cron(하루 1회, 안전망) + GitHub Actions(5분마다, `.github/workflows/newsletter-cron.yml`)** | Vercel **Hobby 플랜은 cron이 하루 1회 실행으로 제한**된다. 그런데 관리자 UI(`datetime-local`)는 시·분 단위 예약을 받으므로, 하루 1회 크론만으로는 예약 시각까지 최대 하루 가까이 발송이 밀릴 수 있다(2026-09 실제 발생 이슈). Pro 플랜 업그레이드 없이 같은 `/api/cron/newsletter/send-due` 엔드포인트를 GitHub Actions 스케줄(무료)로 5분마다 호출해 정밀도를 확보했고, `vercel.json`의 하루 1회 크론은 GitHub Actions가 실패했을 때의 안전망으로 유지한다. |
 | 콘텐츠 블록 | 11종 블록 (product-card, video, columns 등) | **6종으로 축소**: heading, text, image, button, divider, ad_banner | 실제 요구사항("모듈로 추가", "광고 배너 공간")을 충족하는 최소 집합. 필요해지면 타입을 추가하는 구조이지 처음부터 다 만들 필요는 없음. |
 | 에디터 | Tiptap 신규 도입 | **기존 `@tiptap/*` 재사용** | 이미 설치되어 있고 board_posts 작성에도 쓰는 걸로 보임. text 블록의 `content.html`을 Tiptap으로 편집. |
 | 관리자 인증 | (명시 안 됨) | **기존 `app/admin/(protected)/` 그룹 재사용** | `lib/admin-auth.ts`의 JWT 쿠키 세션이 이미 이 라우트 그룹을 보호하고 있으므로 뉴스레터 관리 페이지도 그 아래 넣으면 별도 인증 작업이 필요 없다. |
