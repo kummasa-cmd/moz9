@@ -255,6 +255,15 @@ async function getSuppressedEmailSet(): Promise<Set<string>> {
   return new Set((data ?? []).map((row) => row.email as string));
 }
 
+// Emails already subscribed to the regular newsletter — excluded from
+// promotional sends too, since prospects are meant to be cold outreach to
+// people who aren't subscribers yet (see getTargetProspects below).
+async function getSubscribedEmailSet(): Promise<Set<string>> {
+  const db = createAdminClient();
+  const { data } = await db.from("newsletter_subscribers").select("email").eq("status", "SUBSCRIBED");
+  return new Set((data ?? []).map((row) => row.email as string));
+}
+
 export type UnsubscribeResult = { ok: true; email: string } | { ok: false; error: string };
 
 // A token may belong to a real subscriber or to a promotional-newsletter
@@ -320,14 +329,18 @@ export async function getTargetSubscribers(campaign: {
 }
 
 // Recipients for a PROSPECTS-audience campaign (promotional newsletter) —
-// every registered prospect, minus anyone who has unsubscribed since.
+// every registered prospect, minus anyone who has unsubscribed since and
+// minus anyone who is already a regular subscriber.
 export async function getTargetProspects(): Promise<Prospect[]> {
   const db = createAdminClient();
-  const [{ data }, suppressed] = await Promise.all([
+  const [{ data }, suppressed, subscribed] = await Promise.all([
     db.from("newsletter_prospects").select(PROSPECT_COLUMNS),
     getSuppressedEmailSet(),
+    getSubscribedEmailSet(),
   ]);
-  return (data ?? []).map(mapProspect).filter((p) => !suppressed.has(p.email));
+  return (data ?? [])
+    .map(mapProspect)
+    .filter((p) => !suppressed.has(p.email) && !subscribed.has(p.email));
 }
 
 const COLUMN_BOARD_SLUGS = ["column", "series", "info", "ad"];
