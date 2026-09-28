@@ -99,8 +99,7 @@ export function CampaignSection({
                 defaultValue={defaultRecurringTime}
               />
               <p className="text-xs text-muted-foreground">
-                Vercel Cron은 하루 1회 실행되므로 실제 발송 시각은 등록된 크론 실행 시각을 기준으로
-                처리됩니다.
+                설정한 시각(한국 시간) 이후 첫 자동 발송 점검(약 5분 간격)에서 발송됩니다.
               </p>
             </div>
           )}

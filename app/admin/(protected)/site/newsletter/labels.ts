@@ -36,6 +36,7 @@ export const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
   SCHEDULED: "예약됨",
   SENDING: "발송중",
   SENT: "발송완료",
+  PARTIAL: "일부실패",
   FAILED: "발송실패",
   CANCELLED: "취소됨",
 };

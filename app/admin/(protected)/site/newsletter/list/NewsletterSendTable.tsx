@@ -31,7 +31,7 @@ function statusVariant(status: string) {
 
 function campaignVariant(status: string) {
   if (status === "SENT") return "default" as const;
-  if (status === "FAILED" || status === "CANCELLED") return "destructive" as const;
+  if (status === "FAILED" || status === "PARTIAL" || status === "CANCELLED") return "destructive" as const;
   return "secondary" as const;
 }
 

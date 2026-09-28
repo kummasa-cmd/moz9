@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ContentBlock } from "./blocks/types";
 import type { AdBanner, Newsletter, NewsletterTemplate, Prospect, Subscriber, SubscriberSource } from "./types";
+import { fetchAllRows } from "./paginate";
 
 const NEWSLETTER_COLUMNS =
   "id, title, slug, subject, preheader, thumbnail_url, status, newsletter_type, blocks, view_count, like_count, dislike_count, issue_number, published_at, created_at";
@@ -201,17 +202,19 @@ export async function subscribe(input: SubscribeInput): Promise<SubscribeResult>
 
   const db = createAdminClient();
 
-  const { data: existing } = await db
+  const { data: existing, error: lookupError } = await db
     .from("newsletter_subscribers")
     .select("id, status")
     .eq("email", email)
     .maybeSingle();
 
-  if (existing) {
-    if (existing.status === "SUBSCRIBED") {
-      return { ok: true, alreadySubscribed: true };
-    }
+  if (lookupError) return { ok: false, error: lookupError.message };
 
+  let alreadySubscribed = false;
+
+  if (existing?.status === "SUBSCRIBED") {
+    alreadySubscribed = true;
+  } else if (existing) {
     const { error } = await db
       .from("newsletter_subscribers")
       .update({
@@ -224,19 +227,29 @@ export async function subscribe(input: SubscribeInput): Promise<SubscribeResult>
       .eq("id", existing.id);
 
     if (error) return { ok: false, error: error.message };
-    return { ok: true, alreadySubscribed: false };
+  } else {
+    const { error } = await db.from("newsletter_subscribers").insert({
+      email,
+      name: input.name || null,
+      member_id: input.memberId || null,
+      source: input.source,
+      tags: input.tags ?? [],
+    });
+
+    // 23505: a concurrent submit inserted the same email first.
+    if (error?.code === "23505") alreadySubscribed = true;
+    else if (error) return { ok: false, error: error.message };
   }
 
-  const { error } = await db.from("newsletter_subscribers").insert({
-    email,
-    name: input.name || null,
-    member_id: input.memberId || null,
-    source: input.source,
-    tags: input.tags ?? [],
-  });
+  // An explicit (re)subscribe is fresh consent, so it lifts any earlier
+  // do-not-contact entry — otherwise getTargetSubscribers keeps filtering the
+  // address out and a returning subscriber silently never gets mail. Also
+  // runs on the already-subscribed path, so a retry heals a previous attempt
+  // whose suppression delete failed.
+  const { error: suppressionError } = await removeFromSuppressionList(email);
+  if (suppressionError) return { ok: false, error: suppressionError.message };
 
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, alreadySubscribed: false };
+  return { ok: true, alreadySubscribed };
 }
 
 // Global do-not-contact list, shared by both the regular and promotional
@@ -249,10 +262,19 @@ async function addToSuppressionList(email: string): Promise<void> {
     .upsert({ email }, { onConflict: "email", ignoreDuplicates: true });
 }
 
+async function removeFromSuppressionList(email: string) {
+  const db = createAdminClient();
+  return db.from("newsletter_suppressions").delete().eq("email", email);
+}
+
+// Paged — an unpaged select stops at 1,000 rows, which would let every
+// suppressed email past the first 1,000 receive newsletters again.
 async function getSuppressedEmailSet(): Promise<Set<string>> {
   const db = createAdminClient();
-  const { data } = await db.from("newsletter_suppressions").select("email");
-  return new Set((data ?? []).map((row) => row.email as string));
+  const rows = await fetchAllRows<{ email: string }>((from, to) =>
+    db.from("newsletter_suppressions").select("email").order("id").range(from, to),
+  );
+  return new Set(rows.map((row) => row.email));
 }
 
 // Emails already subscribed to the regular newsletter — excluded from
@@ -318,14 +340,26 @@ export async function getTargetSubscribers(campaign: {
   targetTags: string[];
 }): Promise<Subscriber[]> {
   const db = createAdminClient();
-  let query = db.from("newsletter_subscribers").select(SUBSCRIBER_COLUMNS).eq("status", "SUBSCRIBED");
+  const filterByTags = !campaign.targetAll && campaign.targetTags.length > 0;
 
-  if (!campaign.targetAll && campaign.targetTags.length > 0) {
-    query = query.overlaps("tags", campaign.targetTags);
+  const [rows, suppressed] = await Promise.all([
+    fetchAllRows<Record<string, unknown>>((from, to) => {
+      let query = db.from("newsletter_subscribers").select(SUBSCRIBER_COLUMNS).eq("status", "SUBSCRIBED");
+      if (filterByTags) query = query.overlaps("tags", campaign.targetTags);
+      return query.order("id").range(from, to);
+    }),
+    getSuppressedEmailSet(),
+  ]);
+
+  // A row inserted mid-paging can shift a later page and repeat a subscriber;
+  // dedupe so nobody gets two copies (and the deliveries upsert, keyed on
+  // subscriber_id, doesn't see the same row twice in one statement).
+  const byId = new Map<string, Subscriber>();
+  for (const row of rows) {
+    const subscriber = mapSubscriber(row);
+    if (!suppressed.has(subscriber.email)) byId.set(subscriber.id, subscriber);
   }
-
-  const [{ data }, suppressed] = await Promise.all([query, getSuppressedEmailSet()]);
-  return (data ?? []).map(mapSubscriber).filter((s) => !suppressed.has(s.email));
+  return [...byId.values()];
 }
 
 // Recipients for a PROSPECTS-audience campaign (promotional newsletter) —

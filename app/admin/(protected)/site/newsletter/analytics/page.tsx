@@ -71,7 +71,7 @@ export default async function AdminNewsletterAnalyticsPage() {
     supabase
       .from("newsletter_campaigns")
       .select("*", { count: "exact", head: true })
-      .eq("status", "SENT")
+      .in("status", ["SENT", "PARTIAL"])
       .eq("audience", "SUBSCRIBERS"),
     // prospect_id is only ever set on deliveries sent to the promotional
     // audience (see lib/newsletter/scheduler.ts::processCampaign) — filtering

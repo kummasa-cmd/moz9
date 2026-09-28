@@ -5,7 +5,10 @@ import { useForm } from "react-hook-form";
 import { Mail, CheckCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import {
+  subscribeToNewsletter,
+  type SubscribeActionResult,
+} from "@/app/(site)/newsletter/subscribe/actions";
 
 type FormValues = {
   email: string;
@@ -23,19 +26,20 @@ export function SubscribeForm() {
 
   const onSubmit = async (data: FormValues) => {
     setSubmitError(null);
-    const supabase = createClient();
-    const { error } = await supabase.from("newsletter_subscribers").insert({
-      email: data.email.trim().toLowerCase(),
-      name: data.name?.trim() || null,
-      source: "WEBSITE",
-    });
+    let result: SubscribeActionResult;
+    try {
+      result = await subscribeToNewsletter({ email: data.email, name: data.name });
+    } catch {
+      setSubmitError("구독 신청 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+      return;
+    }
 
-    if (error) {
-      setSubmitError(
-        error.code === "23505"
-          ? "이미 구독 중인 이메일입니다."
-          : "구독 신청 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
-      );
+    if (!result.ok) {
+      setSubmitError(result.error);
+      return;
+    }
+    if (result.alreadySubscribed) {
+      setSubmitError("이미 구독 중인 이메일입니다.");
       return;
     }
 

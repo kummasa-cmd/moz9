@@ -41,7 +41,7 @@ export async function sendCampaignNow(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 
-  await processCampaign(id);
+  await processCampaign(id, { trigger: "manual" });
 
   revalidatePath("/admin/site/newsletter/list");
   revalidatePath("/admin/site/newsletter/promo/list");

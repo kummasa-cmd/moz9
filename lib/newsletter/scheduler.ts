@@ -10,25 +10,91 @@ import {
 } from "./queries";
 import { newsletterConfig } from "./config";
 import { buildEmailTemplate, chunk, getResendClient, personalizeEmail } from "./email";
+import { campaignStatusAfterRun, isCampaignDue, type DueCampaign } from "./campaign-due";
+import { kstDateString } from "./schedule-time";
 
-function todayDateString(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+// Resend's batch endpoint accepts at most 100 emails per call.
+const SEND_BATCH_SIZE = 100;
+// Kept well under PostgREST's max-rows so the upsert's returned rows (which
+// drive who actually gets sent to) are never truncated.
+const DELIVERY_UPSERT_CHUNK_SIZE = 500;
 
-function nextCampaignStatus(sendType: string, rangeEnd: string | null): "SENT" | "SCHEDULED" {
-  if (sendType === "RECURRING") return "SCHEDULED";
-  if (sendType === "RANGE") {
-    return rangeEnd && todayDateString() >= rangeEnd ? "SENT" : "SCHEDULED";
-  }
-  return "SENT";
-}
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+type DeliveryRow = {
+  id: string;
+  subscriber_id: string | null;
+  prospect_id: string | null;
+  tracking_token: string;
+};
 
 export type ProcessCampaignResult =
-  | { ok: true; sent: number; recipients: number }
-  | { ok: false; error: string };
+  | { ok: true; sent: number; recipients: number; failed: number }
+  | { ok: false; error: string; skipped?: boolean };
 
-export async function processCampaign(campaignId: string): Promise<ProcessCampaignResult> {
+// "schedule": cron / immediate-after-save — sends only if the campaign is
+// still SCHEDULED and (for RECURRING/RANGE) hasn't already gone out today.
+// "manual": the admin "지금 발송" button — still requires SCHEDULED, but is
+// allowed to send a RECURRING/RANGE campaign again on the same day.
+export type ProcessCampaignTrigger = "schedule" | "manual";
+
+// Atomically moves the campaign SCHEDULED -> SENDING. Every trigger (GitHub
+// Actions cron, Vercel cron, the admin buttons) goes through this, so two
+// overlapping triggers can't both send: the loser's UPDATE matches no row.
+// RECURRING/RANGE campaigns return to SCHEDULED after each run, so status
+// alone can't stop a second trigger later the same day — the last_sent_date
+// check is part of the same UPDATE for that reason.
+async function claimCampaign(
+  db: AdminClient,
+  campaign: { id: string; send_type: string },
+  trigger: ProcessCampaignTrigger,
+  now: Date,
+): Promise<boolean> {
+  let query = db
+    .from("newsletter_campaigns")
+    .update({ status: "SENDING", sending_started_at: now.toISOString(), last_error: null })
+    .eq("id", campaign.id)
+    .eq("status", "SCHEDULED");
+
+  const isDaily = campaign.send_type === "RECURRING" || campaign.send_type === "RANGE";
+  if (trigger === "schedule" && isDaily) {
+    query = query.or(`last_sent_date.is.null,last_sent_date.neq.${kstDateString(now)}`);
+  }
+
+  const { data, error } = await query.select("id").maybeSingle();
+  if (error) throw new Error(error.message);
+  return data !== null;
+}
+
+async function upsertDeliveries(
+  db: AdminClient,
+  rows: Record<string, unknown>[],
+  onConflict: string,
+): Promise<DeliveryRow[]> {
+  const result: DeliveryRow[] = [];
+  for (const part of chunk(rows, DELIVERY_UPSERT_CHUNK_SIZE)) {
+    const { data, error } = await db
+      .from("newsletter_deliveries")
+      .upsert(part, { onConflict })
+      .select("id, subscriber_id, prospect_id, tracking_token");
+    if (error) throw new Error(`발송 기록 생성 실패: ${error.message}`);
+    result.push(...((data ?? []) as DeliveryRow[]));
+  }
+  return result;
+}
+
+async function markDeliveriesFailed(db: AdminClient, ids: string[], message: string): Promise<void> {
+  if (ids.length === 0) return;
+  await db.from("newsletter_deliveries").update({ status: "FAILED", error_message: message }).in("id", ids);
+}
+
+export async function processCampaign(
+  campaignId: string,
+  opts: { trigger?: ProcessCampaignTrigger } = {},
+): Promise<ProcessCampaignResult> {
+  const trigger = opts.trigger ?? "schedule";
   const db = createAdminClient();
+  const now = new Date();
 
   const { data: campaign } = await db
     .from("newsletter_campaigns")
@@ -37,8 +103,6 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
     .maybeSingle();
 
   if (!campaign) return { ok: false, error: "캠페인을 찾을 수 없습니다." };
-
-  const isPromo = campaign.audience === "PROSPECTS";
 
   const { data: newsletter } = await db
     .from("newsletters")
@@ -52,6 +116,37 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
     return { ok: false, error: "RESEND_API_KEY 또는 NEWSLETTER_SENDER_EMAIL이 설정되지 않았습니다." };
   }
 
+  if (!(await claimCampaign(db, campaign, trigger, now))) {
+    return { ok: false, skipped: true, error: "이미 발송 중이거나 발송 대기 상태가 아닌 캠페인입니다." };
+  }
+
+  try {
+    return await sendClaimedCampaign(db, campaign, newsletter, now);
+  } catch (err) {
+    // Anything thrown after the claim (DB errors loading recipients, creating
+    // delivery rows, ...) must not leave the campaign stuck in SENDING.
+    const message = err instanceof Error ? err.message : "발송 중 오류가 발생했습니다.";
+    await db.from("newsletter_campaigns").update({ status: "FAILED", last_error: message }).eq("id", campaignId);
+    return { ok: false, error: message };
+  }
+}
+
+async function sendClaimedCampaign(
+  db: AdminClient,
+  campaign: {
+    id: string;
+    send_type: string;
+    target_all: boolean;
+    target_tags: string[] | null;
+    range_end: string | null;
+    audience: string;
+  },
+  newsletter: { id: string; slug: string; subject: string; blocks: unknown; published_at: string | null },
+  now: Date,
+): Promise<ProcessCampaignResult> {
+  const campaignId = campaign.id;
+  const isPromo = campaign.audience === "PROSPECTS";
+
   // Subscriber and Prospect are structurally compatible for send purposes —
   // both carry { id, email, unsubscribeToken }.
   const recipients: { id: string; email: string; unsubscribeToken: string }[] = isPromo
@@ -61,23 +156,27 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
         targetTags: campaign.target_tags ?? [],
       });
 
-  await db
-    .from("newsletter_campaigns")
-    .update({ status: "SENDING", total_recipients: recipients.length })
-    .eq("id", campaignId);
+  await db.from("newsletter_campaigns").update({ total_recipients: recipients.length }).eq("id", campaignId);
 
   if (recipients.length === 0) {
     await db
       .from("newsletter_campaigns")
       .update({
-        status: nextCampaignStatus(campaign.send_type, campaign.range_end),
-        sent_at: new Date().toISOString(),
-        last_sent_date: todayDateString(),
+        status: campaignStatusAfterRun({
+          sendType: campaign.send_type,
+          rangeEnd: campaign.range_end,
+          recipients: 0,
+          sent: 0,
+          now,
+        }),
+        sent_at: now.toISOString(),
+        last_sent_date: kstDateString(now),
         total_sent: 0,
+        total_failed: 0,
       })
       .eq("id", campaignId);
 
-    return { ok: true, sent: 0, recipients: 0 };
+    return { ok: true, sent: 0, recipients: 0, failed: 0 };
   }
 
   // Assigned here (before the email is composed) rather than after sending,
@@ -111,71 +210,92 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
     status: "QUEUED",
   }));
 
-  const { data: deliveries } = await db
-    .from("newsletter_deliveries")
-    .upsert(deliveryRows, { onConflict: isPromo ? "campaign_id,prospect_id" : "campaign_id,subscriber_id" })
-    .select("id, subscriber_id, prospect_id, tracking_token");
+  const deliveries = await upsertDeliveries(
+    db,
+    deliveryRows,
+    isPromo ? "campaign_id,prospect_id" : "campaign_id,subscriber_id",
+  );
 
   const recipientById = new Map(recipients.map((r) => [r.id, r]));
   const resend = getResendClient();
 
+  // Counts only emails Resend actually accepted — not batch sizes, which
+  // would also count deliveries dropped from the payload.
   let totalSent = 0;
+  let lastError: string | null = null;
 
-  for (const batch of chunk(deliveries ?? [], 100)) {
-    const payload = batch
-      .map((d) => {
-        const recipient = recipientById.get(isPromo ? d.prospect_id : d.subscriber_id);
-        if (!recipient) return null;
-        const html = personalizeEmail(templateHtml, {
-          trackingToken: d.tracking_token,
-          unsubscribeToken: recipient.unsubscribeToken,
-        });
-        return {
+  for (const batch of chunk(deliveries, SEND_BATCH_SIZE)) {
+    const sendable: { deliveryId: string; payload: { from: string; to: string; subject: string; html: string } }[] =
+      [];
+    const unmatchedIds: string[] = [];
+
+    for (const d of batch) {
+      const recipient = recipientById.get((isPromo ? d.prospect_id : d.subscriber_id) ?? "");
+      if (!recipient) {
+        unmatchedIds.push(d.id);
+        continue;
+      }
+      sendable.push({
+        deliveryId: d.id,
+        payload: {
           from: `${newsletterConfig.senderName} <${newsletterConfig.senderEmail}>`,
           to: recipient.email,
           subject: newsletter.subject,
-          html,
-        };
-      })
-      .filter((p): p is NonNullable<typeof p> => p !== null);
+          html: personalizeEmail(templateHtml, {
+            trackingToken: d.tracking_token,
+            unsubscribeToken: recipient.unsubscribeToken,
+          }),
+        },
+      });
+    }
 
-    const ids = batch.map((d) => d.id);
+    if (unmatchedIds.length > 0) {
+      lastError = "수신자 정보를 찾을 수 없습니다.";
+      await markDeliveriesFailed(db, unmatchedIds, lastError);
+    }
+    if (sendable.length === 0) continue;
+
+    const ids = sendable.map((s) => s.deliveryId);
 
     try {
-      const { error: sendError } = await resend.batch.send(payload);
+      const { error: sendError } = await resend.batch.send(sendable.map((s) => s.payload));
 
       if (sendError) {
-        await db
-          .from("newsletter_deliveries")
-          .update({ status: "FAILED", error_message: sendError.message })
-          .in("id", ids);
+        lastError = sendError.message;
+        await markDeliveriesFailed(db, ids, sendError.message);
       } else {
         await db
           .from("newsletter_deliveries")
-          .update({ status: "SENT", sent_at: new Date().toISOString() })
+          .update({ status: "SENT", sent_at: new Date().toISOString(), error_message: null })
           .in("id", ids);
-        totalSent += batch.length;
+        totalSent += sendable.length;
       }
     } catch (err) {
-      await db
-        .from("newsletter_deliveries")
-        .update({
-          status: "FAILED",
-          error_message: err instanceof Error ? err.message : "발송 중 오류가 발생했습니다.",
-        })
-        .in("id", ids);
+      lastError = err instanceof Error ? err.message : "발송 중 오류가 발생했습니다.";
+      await markDeliveriesFailed(db, ids, lastError);
     }
   }
 
-  const allFailed = totalSent === 0 && recipients.length > 0;
+  // Measured against recipients rather than returned delivery rows, so a
+  // recipient that somehow got no delivery row still counts as failed.
+  const totalFailed = recipients.length - totalSent;
+  const status = campaignStatusAfterRun({
+    sendType: campaign.send_type,
+    rangeEnd: campaign.range_end,
+    recipients: recipients.length,
+    sent: totalSent,
+    now,
+  });
 
   await db
     .from("newsletter_campaigns")
     .update({
-      status: allFailed ? "FAILED" : nextCampaignStatus(campaign.send_type, campaign.range_end),
+      status,
       sent_at: new Date().toISOString(),
-      last_sent_date: todayDateString(),
+      last_sent_date: kstDateString(now),
       total_sent: totalSent,
+      total_failed: totalFailed,
+      last_error: totalFailed > 0 ? lastError : null,
     })
     .eq("id", campaignId);
 
@@ -186,49 +306,18 @@ export async function processCampaign(campaignId: string): Promise<ProcessCampai
     await recordBoardPostNewsletterUsage(getSourcePostIds(blocks));
   }
 
-  if (allFailed) {
+  if (status === "FAILED") {
     return { ok: false, error: "이메일 발송에 모두 실패했습니다. Resend 발신 도메인 인증 상태를 확인해 주세요." };
   }
 
-  return { ok: true, sent: totalSent, recipients: recipients.length };
-}
-
-export type DueCampaign = {
-  id: string;
-  send_type: string;
-  scheduled_at: string | null;
-  range_start: string | null;
-  range_end: string | null;
-  last_sent_date: string | null;
-};
-
-export function isCampaignDue(campaign: DueCampaign, now: Date): boolean {
-  const nowIso = now.toISOString();
-  const today = nowIso.slice(0, 10);
-
-  if (campaign.send_type === "SCHEDULED") {
-    return campaign.scheduled_at !== null && campaign.scheduled_at <= nowIso;
-  }
-  if (campaign.send_type === "RECURRING") {
-    return campaign.last_sent_date !== today;
-  }
-  if (campaign.send_type === "RANGE") {
-    return (
-      (campaign.range_start ?? "") <= today &&
-      today <= (campaign.range_end ?? "") &&
-      campaign.last_sent_date !== today
-    );
-  }
-  // IMMEDIATE campaigns are normally sent right after creation, but this is a
-  // safety net in case one was left in SCHEDULED status without being sent.
-  return campaign.send_type === "IMMEDIATE";
+  return { ok: true, sent: totalSent, recipients: recipients.length, failed: totalFailed };
 }
 
 export async function getDueCampaigns(now: Date = new Date()): Promise<DueCampaign[]> {
   const db = createAdminClient();
   const { data } = await db
     .from("newsletter_campaigns")
-    .select("id, send_type, scheduled_at, range_start, range_end, last_sent_date")
+    .select("id, send_type, scheduled_at, recurring_time, range_start, range_end, last_sent_date")
     .eq("status", "SCHEDULED");
 
   return (data ?? []).filter((c) => isCampaignDue(c, now));
