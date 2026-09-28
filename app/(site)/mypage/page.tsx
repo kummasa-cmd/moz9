@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MessageCircle, CreditCard, Newspaper, ArrowRight } from "lucide-react";
+import { MessageCircle, CreditCard, Newspaper, ArrowRight, Pencil } from "lucide-react";
 import Link from "next/link";
 import {
   Table,
@@ -157,12 +157,21 @@ export default async function MypageDashboard() {
         <div className="rounded-xl border border-border bg-white p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-foreground">최근 컬럼 게시판 글</h2>
-            <Link
-              href="/mypage/column"
-              className="inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-primary transition-colors"
-            >
-              전체보기 <ArrowRight size={12} />
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/mypage/column/new"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+              >
+                <Pencil size={12} />
+                글쓰러가기
+              </Link>
+              <Link
+                href="/mypage/column"
+                className="inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+              >
+                전체보기 <ArrowRight size={12} />
+              </Link>
+            </div>
           </div>
 
           <div className="rounded-lg border border-border overflow-hidden overflow-x-auto">
