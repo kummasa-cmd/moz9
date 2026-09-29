@@ -1,6 +1,8 @@
 "use server";
 
+import { after } from "next/server";
 import { subscribe } from "@/lib/newsletter/queries";
+import { syncSubscriberContact } from "@/lib/newsletter/contact-sync";
 
 // Same shape the form validates client-side (react-hook-form) and the old
 // anon-insert RLS policy enforced — see 0025_security_advisor_fixes.sql.
@@ -33,5 +35,13 @@ export async function subscribeToNewsletter(input: {
     return { ok: false, error: "구독 신청 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." };
   }
 
-  return result;
+  // Supabase first, Resend second: the Contact sync runs after the response
+  // is sent, so a slow or failing Resend call never fails the subscription
+  // (failures are recorded on the row and retried later).
+  const { subscriberId, needsContactSync } = result;
+  if (subscriberId && needsContactSync) {
+    after(() => syncSubscriberContact(subscriberId));
+  }
+
+  return { ok: true, alreadySubscribed: result.alreadySubscribed };
 }

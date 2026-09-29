@@ -193,7 +193,9 @@ export type SubscribeInput = {
 };
 
 export type SubscribeResult =
-  | { ok: true; alreadySubscribed: boolean }
+  // subscriberId / needsContactSync: lets the caller mirror the result to
+  // Resend Contacts afterwards (lib/newsletter/contact-sync.ts).
+  | { ok: true; alreadySubscribed: boolean; subscriberId: string | null; needsContactSync: boolean }
   | { ok: false; error: string };
 
 export async function subscribe(input: SubscribeInput): Promise<SubscribeResult> {
@@ -204,16 +206,21 @@ export async function subscribe(input: SubscribeInput): Promise<SubscribeResult>
 
   const { data: existing, error: lookupError } = await db
     .from("newsletter_subscribers")
-    .select("id, status")
+    .select("id, status, resend_synced_at, resend_sync_error")
     .eq("email", email)
     .maybeSingle();
 
   if (lookupError) return { ok: false, error: lookupError.message };
 
   let alreadySubscribed = false;
+  let subscriberId: string | null = (existing?.id as string | undefined) ?? null;
+  // A status change always needs a Resend sync; an already-subscribed retry
+  // only when the earlier sync never landed (so resubmits can't spam Resend).
+  let needsContactSync = true;
 
   if (existing?.status === "SUBSCRIBED") {
     alreadySubscribed = true;
+    needsContactSync = !existing.resend_synced_at || !!existing.resend_sync_error;
   } else if (existing) {
     const { error } = await db
       .from("newsletter_subscribers")
@@ -223,22 +230,32 @@ export async function subscribe(input: SubscribeInput): Promise<SubscribeResult>
         unsubscribed_at: null,
         name: input.name || undefined,
         member_id: input.memberId || undefined,
+        // Marks the Resend Contact stale until the follow-up sync succeeds.
+        resend_synced_at: null,
       })
       .eq("id", existing.id);
 
     if (error) return { ok: false, error: error.message };
   } else {
-    const { error } = await db.from("newsletter_subscribers").insert({
-      email,
-      name: input.name || null,
-      member_id: input.memberId || null,
-      source: input.source,
-      tags: input.tags ?? [],
-    });
+    const { data: inserted, error } = await db
+      .from("newsletter_subscribers")
+      .insert({
+        email,
+        name: input.name || null,
+        member_id: input.memberId || null,
+        source: input.source,
+        tags: input.tags ?? [],
+      })
+      .select("id")
+      .single();
 
-    // 23505: a concurrent submit inserted the same email first.
-    if (error?.code === "23505") alreadySubscribed = true;
-    else if (error) return { ok: false, error: error.message };
+    // 23505: a concurrent submit inserted the same email first — that
+    // request owns the Resend sync.
+    if (error?.code === "23505") {
+      alreadySubscribed = true;
+      needsContactSync = false;
+    } else if (error) return { ok: false, error: error.message };
+    else subscriberId = inserted.id as string;
   }
 
   // An explicit (re)subscribe is fresh consent, so it lifts any earlier
@@ -249,20 +266,20 @@ export async function subscribe(input: SubscribeInput): Promise<SubscribeResult>
   const { error: suppressionError } = await removeFromSuppressionList(email);
   if (suppressionError) return { ok: false, error: suppressionError.message };
 
-  return { ok: true, alreadySubscribed };
+  return { ok: true, alreadySubscribed, subscriberId, needsContactSync: needsContactSync && !!subscriberId };
 }
 
 // Global do-not-contact list, shared by both the regular and promotional
 // newsletter send paths (getTargetSubscribers / getTargetProspects below) —
 // once an email lands here, nothing gets sent to it again either way.
-async function addToSuppressionList(email: string): Promise<void> {
+export async function addToSuppressionList(email: string): Promise<void> {
   const db = createAdminClient();
   await db
     .from("newsletter_suppressions")
     .upsert({ email }, { onConflict: "email", ignoreDuplicates: true });
 }
 
-async function removeFromSuppressionList(email: string) {
+export async function removeFromSuppressionList(email: string) {
   const db = createAdminClient();
   return db.from("newsletter_suppressions").delete().eq("email", email);
 }
@@ -286,7 +303,11 @@ async function getSubscribedEmailSet(): Promise<Set<string>> {
   return new Set((data ?? []).map((row) => row.email as string));
 }
 
-export type UnsubscribeResult = { ok: true; email: string } | { ok: false; error: string };
+// subscriberId is set only for regular-newsletter subscribers — prospects
+// aren't mirrored to Resend Contacts, so the caller syncs only when present.
+export type UnsubscribeResult =
+  | { ok: true; email: string; subscriberId: string | null }
+  | { ok: false; error: string };
 
 // A token may belong to a real subscriber or to a promotional-newsletter
 // prospect — both use the same unsubscribe link/page, so this checks both
@@ -297,17 +318,22 @@ export async function unsubscribeByToken(token: string): Promise<UnsubscribeResu
 
   const { data: subscriber, error } = await db
     .from("newsletter_subscribers")
-    .update({ status: "UNSUBSCRIBED", unsubscribed_at: new Date().toISOString() })
+    .update({
+      status: "UNSUBSCRIBED",
+      unsubscribed_at: new Date().toISOString(),
+      // Marks the Resend Contact stale until the follow-up sync succeeds.
+      resend_synced_at: null,
+    })
     .eq("unsubscribe_token", token)
     .eq("status", "SUBSCRIBED")
-    .select("email")
+    .select("id, email")
     .maybeSingle();
 
   if (error) return { ok: false, error: error.message };
 
   if (subscriber) {
     await addToSuppressionList(subscriber.email as string);
-    return { ok: true, email: subscriber.email as string };
+    return { ok: true, email: subscriber.email as string, subscriberId: subscriber.id as string };
   }
 
   const { data: prospect } = await db
@@ -318,7 +344,7 @@ export async function unsubscribeByToken(token: string): Promise<UnsubscribeResu
 
   if (prospect) {
     await addToSuppressionList(prospect.email as string);
-    return { ok: true, email: prospect.email as string };
+    return { ok: true, email: prospect.email as string, subscriberId: null };
   }
 
   return { ok: false, error: "이미 처리되었거나 유효하지 않은 링크입니다." };

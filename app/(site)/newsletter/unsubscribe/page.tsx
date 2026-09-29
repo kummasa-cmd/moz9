@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle, XCircle } from "lucide-react";
+import { after } from "next/server";
 import { unsubscribeByToken } from "@/lib/newsletter/queries";
+import { syncSubscriberContact } from "@/lib/newsletter/contact-sync";
 
 export const metadata: Metadata = {
   title: "뉴스레터 수신거부 | 모즈나인",
@@ -16,6 +18,14 @@ export default async function NewsletterUnsubscribePage({ searchParams }: Props)
   const result = token
     ? await unsubscribeByToken(token)
     : { ok: false as const, error: "잘못된 접근입니다." };
+
+  // The UNSUBSCRIBED status and suppression entry are already saved; mirror
+  // them to the Resend Contact afterwards. A Resend failure is recorded on
+  // the row for retry and never undoes the unsubscribe.
+  if (result.ok && result.subscriberId) {
+    const subscriberId = result.subscriberId;
+    after(() => syncSubscriberContact(subscriberId));
+  }
 
   return (
     <div className="max-w-lg mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-28 text-center">
