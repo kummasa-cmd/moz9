@@ -1,12 +1,23 @@
 import { Resend, type WebhookEventPayload } from "resend";
 
-// Resend webhook handling (3단계: 검증 + 분류만, DB 반영은 4단계).
+// Resend webhook: signature check + event planning (4단계).
 //
 // verifyResendWebhook checks the Svix signature with RESEND_WEBHOOK_SECRET
 // through the official SDK (resend.webhooks.verify → standardwebhooks, which
-// also rejects timestamps older than 5 minutes = replay protection).
-// classifyResendWebhookEvent turns a verified event into the Supabase change
-// 4단계 will apply; the Stage 3 route only acknowledges it.
+// also rejects timestamps more than 5 minutes off = replay protection).
+// planResendWebhookEvent turns a verified event into what we may do with it;
+// webhook-processor.ts applies the plan to Supabase.
+//
+// Which events may change newsletter data:
+//   - contact.* with unsubscribed=true — a Resend-side opt-out (Broadcast
+//     unsubscribe link / List-Unsubscribe). Contacts only mirror
+//     newsletter_subscribers, so this is newsletter data by definition.
+//   - email.* carrying a broadcast_id — but only once the processor has
+//     matched it to a 검레터 run in newsletter_broadcast_sends.
+// Everything else is recorded and ignored. In particular email.* events
+// without a broadcast_id are ignored: service mail (lib/mail.ts) uses the
+// same sender address as the legacy newsletter, so there is no safe way to
+// tell a legacy newsletter email from a transactional one.
 //
 // Kept free of Supabase / Next.js imports so it can be unit-tested.
 
@@ -25,7 +36,7 @@ const sdkVerifier: WebhookVerifier = (input) => new Resend("re_webhook_verify_on
 
 export type VerifyResult =
   // webhookId (svix-id) is the same across Resend's retries of one event —
-  // the dedupe key for 4단계.
+  // the idempotency key.
   | { ok: true; webhookId: string; event: WebhookEventPayload }
   | { ok: false; status: 400 | 401 | 503; error: string };
 
@@ -53,92 +64,128 @@ export function verifyResendWebhook(
   }
 }
 
-export type BroadcastEmailEvent =
-  | "sent"
-  | "delivered"
-  | "delivery_delayed"
-  | "opened"
-  | "clicked"
-  | "bounced"
-  | "complained"
-  | "failed"
-  | "suppressed"
-  | "scheduled";
-
 export type SubscriberStatusChange = {
-  // BOUNCED for a permanent bounce, UNSUBSCRIBED otherwise. 4단계 also adds
-  // the address to newsletter_suppressions, like unsubscribeByToken does.
   status: "BOUNCED" | "UNSUBSCRIBED";
   reason: "permanent_bounce" | "complaint" | "resend_unsubscribe";
-  // Lower-cased. Only for the DB lookup — never log it.
+  // Lower-cased. Only for the DB lookup — never logged or stored on the event.
   email: string;
 };
 
-export type WebhookAction = {
-  type: string;
-  // email.* events that belong to a Broadcast → newsletter_broadcast_sends
-  // (resend_broadcast_id) for per-run stats.
-  broadcast: { broadcastId: string; event: BroadcastEmailEvent; emailId: string; link?: string } | null;
-  // Changes Supabase must mirror so the legacy path and the Contact sync
-  // agree with Resend.
-  subscriber: SubscriberStatusChange | null;
-};
+export type IgnoreReason = "not_newsletter" | "unsupported_type" | "contact_not_unsubscribed" | "missing_data";
 
-const EMAIL_EVENTS: Record<string, BroadcastEmailEvent> = {
-  "email.sent": "sent",
-  "email.delivered": "delivered",
-  "email.delivery_delayed": "delivery_delayed",
-  "email.opened": "opened",
-  "email.clicked": "clicked",
-  "email.bounced": "bounced",
-  "email.complained": "complained",
-  "email.failed": "failed",
-  "email.suppressed": "suppressed",
-  "email.scheduled": "scheduled",
-};
+export type WebhookPlan = {
+  eventType: string;
+  eventCreatedAt: string | null;
+  metadata: Record<string, string>;
+} & (
+  | { kind: "ignore"; reason: IgnoreReason }
+  | { kind: "contact_unsubscribed"; contactId: string | null; change: SubscriberStatusChange }
+  | {
+      kind: "broadcast_email";
+      broadcastId: string;
+      emailId: string;
+      // Applied only if the broadcast turns out to be a 검레터 run.
+      change: SubscriberStatusChange | null;
+    }
+);
 
-export function classifyResendWebhookEvent(event: WebhookEventPayload): WebhookAction {
-  const action: WebhookAction = { type: event.type, broadcast: null, subscriber: null };
+const EMAIL_EVENT_TYPES = new Set([
+  "email.sent",
+  "email.delivered",
+  "email.delivery_delayed",
+  "email.opened",
+  "email.clicked",
+  "email.bounced",
+  "email.complained",
+  "email.failed",
+  "email.suppressed",
+  "email.scheduled",
+]);
+
+// Keeps origin + path only: query strings can carry per-recipient tokens.
+export function sanitizeLink(link: string | undefined): string | null {
+  if (!link) return null;
+  try {
+    const url = new URL(link);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    const clean = `${url.origin}${url.pathname}`;
+    return clean.length > 500 ? clean.slice(0, 500) : clean;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeEmail(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const email = value.trim().toLowerCase();
+  return email.includes("@") ? email : null;
+}
+
+export function planResendWebhookEvent(event: WebhookEventPayload): WebhookPlan {
+  const base = {
+    eventType: event.type,
+    eventCreatedAt: typeof event.created_at === "string" ? event.created_at : null,
+  };
 
   if (event.type === "contact.updated" || event.type === "contact.created") {
-    // An unsubscribe through Resend's link (Broadcast footer or the
-    // List-Unsubscribe header) only changes the Resend Contact — Supabase
-    // must follow or the legacy path would keep mailing the address.
-    if (event.data.unsubscribed && event.data.email) {
-      action.subscriber = { status: "UNSUBSCRIBED", reason: "resend_unsubscribe", email: event.data.email.trim().toLowerCase() };
+    const contactId = typeof event.data?.id === "string" ? event.data.id : null;
+    const metadata: Record<string, string> = contactId ? { contact_id: contactId } : {};
+    if (event.data?.unsubscribed !== true) {
+      return { ...base, metadata, kind: "ignore", reason: "contact_not_unsubscribed" };
     }
-    return action;
-  }
-
-  const emailEvent = EMAIL_EVENTS[event.type];
-  if (!emailEvent) return action;
-
-  const data = event.data as { broadcast_id?: string; email_id: string; to?: string[] };
-  if (data.broadcast_id) {
-    action.broadcast = {
-      broadcastId: data.broadcast_id,
-      event: emailEvent,
-      emailId: data.email_id,
-      ...(event.type === "email.clicked" ? { link: event.data.click.link } : {}),
+    const email = normalizeEmail(event.data.email);
+    if (!email) return { ...base, metadata, kind: "ignore", reason: "missing_data" };
+    return {
+      ...base,
+      metadata,
+      kind: "contact_unsubscribed",
+      contactId,
+      change: { status: "UNSUBSCRIBED", reason: "resend_unsubscribe", email },
     };
   }
 
-  const recipient = data.to?.[0]?.trim().toLowerCase();
-  if (recipient) {
-    if (event.type === "email.bounced" && event.data.bounce?.type?.toLowerCase() === "permanent") {
-      action.subscriber = { status: "BOUNCED", reason: "permanent_bounce", email: recipient };
-    } else if (event.type === "email.complained") {
-      action.subscriber = { status: "UNSUBSCRIBED", reason: "complaint", email: recipient };
-    }
+  if (!EMAIL_EVENT_TYPES.has(event.type)) {
+    return { ...base, metadata: {}, kind: "ignore", reason: "unsupported_type" };
   }
 
-  return action;
+  const data = event.data as { broadcast_id?: unknown; email_id?: unknown; to?: unknown };
+  const broadcastId = typeof data.broadcast_id === "string" && data.broadcast_id ? data.broadcast_id : null;
+  // No broadcast id: legacy newsletter or service mail — not distinguishable,
+  // so neither is touched.
+  if (!broadcastId) return { ...base, metadata: {}, kind: "ignore", reason: "not_newsletter" };
+
+  const emailId = typeof data.email_id === "string" && data.email_id ? data.email_id : null;
+  if (!emailId) return { ...base, metadata: {}, kind: "ignore", reason: "missing_data" };
+
+  const metadata: Record<string, string> = {};
+  let change: SubscriberStatusChange | null = null;
+  const recipient = normalizeEmail(Array.isArray(data.to) ? data.to[0] : undefined);
+
+  if (event.type === "email.bounced") {
+    const bounce = event.data.bounce ?? { type: "", subType: "" };
+    if (bounce.type) metadata.bounce_type = String(bounce.type);
+    if (bounce.subType) metadata.bounce_sub_type = String(bounce.subType);
+    // Only a Permanent bounce (hard bounce) takes the address out for good.
+    // Transient / Undetermined bounces are stats only.
+    if (recipient && String(bounce.type).toLowerCase() === "permanent") {
+      change = { status: "BOUNCED", reason: "permanent_bounce", email: recipient };
+    }
+  } else if (event.type === "email.complained") {
+    if (recipient) change = { status: "UNSUBSCRIBED", reason: "complaint", email: recipient };
+  } else if (event.type === "email.clicked") {
+    const link = sanitizeLink(event.data.click?.link);
+    if (link) metadata.link = link;
+  }
+
+  return { ...base, metadata, kind: "broadcast_email", broadcastId, emailId, change };
 }
 
 // Log-safe summary (no addresses, no links).
-export function describeWebhookAction(action: WebhookAction): string {
-  const parts = [action.type];
-  if (action.broadcast) parts.push(`broadcast=${action.broadcast.broadcastId}`, `event=${action.broadcast.event}`);
-  if (action.subscriber) parts.push(`subscriber→${action.subscriber.status}(${action.subscriber.reason})`);
+export function describeWebhookPlan(plan: WebhookPlan): string {
+  const parts = [plan.eventType, plan.kind];
+  if (plan.kind === "ignore") parts.push(plan.reason);
+  if (plan.kind === "broadcast_email") parts.push(`broadcast=${plan.broadcastId}`);
+  const change = plan.kind === "ignore" ? null : plan.change;
+  if (change) parts.push(`subscriber→${change.status}(${change.reason})`);
   return parts.join(" ");
 }

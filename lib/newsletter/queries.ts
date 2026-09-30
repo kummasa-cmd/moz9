@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { ContentBlock } from "./blocks/types";
 import type { AdBanner, Newsletter, NewsletterTemplate, Prospect, Subscriber, SubscriberSource } from "./types";
 import { fetchAllRows } from "./paginate";
+import { isMissingFunctionError, mapSubscribeRpcRow, type SubscribeResult, type SubscribeRpcRow } from "./subscribe-flow";
 
 const NEWSLETTER_COLUMNS =
   "id, title, slug, subject, preheader, thumbnail_url, status, newsletter_type, blocks, view_count, like_count, dislike_count, issue_number, published_at, created_at";
@@ -192,16 +193,38 @@ export type SubscribeInput = {
   tags?: string[];
 };
 
-export type SubscribeResult =
-  // subscriberId / needsContactSync: lets the caller mirror the result to
-  // Resend Contacts afterwards (lib/newsletter/contact-sync.ts).
-  | { ok: true; alreadySubscribed: boolean; subscriberId: string | null; needsContactSync: boolean }
-  | { ok: false; error: string };
+export type { SubscribeResult };
 
+// (Re)subscribe through the SQL function newsletter_subscribe (0029), which
+// checks the suppression reason and changes the subscriber row and the
+// suppression list in one locked transaction:
+//   UNSUBSCRIBE suppression        → lifted, row back to SUBSCRIBED
+//   COMPLAINT / BOUNCE, or BOUNCED → blocked, nothing changes
 export async function subscribe(input: SubscribeInput): Promise<SubscribeResult> {
   const email = input.email.trim().toLowerCase();
   if (!email) return { ok: false, error: "이메일을 입력해 주세요." };
 
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("newsletter_subscribe", {
+    p_email: email,
+    p_name: input.name ?? null,
+    p_member_id: input.memberId ?? null,
+    p_source: input.source,
+    p_tags: input.tags ?? [],
+  });
+
+  // Until 0029 is applied the function doesn't exist; keep signups working
+  // on the old path (no COMPLAINT / BOUNCE suppressions can exist yet then).
+  if (isMissingFunctionError(error)) return subscribeWithoutSuppressionReasons(input);
+  if (error) return { ok: false, error: error.message };
+
+  return mapSubscribeRpcRow((Array.isArray(data) ? data[0] : data) as SubscribeRpcRow | null);
+}
+
+// Pre-0029 subscribe path. Only reached while newsletter_subscribe() is
+// missing; remove once 0029 is applied everywhere.
+async function subscribeWithoutSuppressionReasons(input: SubscribeInput): Promise<SubscribeResult> {
+  const email = input.email.trim().toLowerCase();
   const db = createAdminClient();
 
   const { data: existing, error: lookupError } = await db

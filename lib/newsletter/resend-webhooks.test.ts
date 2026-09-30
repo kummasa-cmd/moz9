@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import type { WebhookEventPayload } from "resend";
 import {
-  classifyResendWebhookEvent,
-  describeWebhookAction,
+  describeWebhookPlan,
+  planResendWebhookEvent,
+  sanitizeLink,
   verifyResendWebhook,
   type WebhookVerifier,
 } from "./resend-webhooks";
@@ -98,74 +99,114 @@ function event(value: unknown): WebhookEventPayload {
 
 const baseData = { email_id: "e_1", created_at: "", from: "news@news.moz9.kr", subject: "s", to: ["Kim@Example.com"] };
 
-describe("classifyResendWebhookEvent", () => {
-  it("maps broadcast email events to the broadcast", () => {
-    const action = classifyResendWebhookEvent(event({ type: "email.opened", created_at: "", data: { ...baseData, broadcast_id: "b_1" } }));
-    assert.deepEqual(action.broadcast, { broadcastId: "b_1", event: "opened", emailId: "e_1" });
-    assert.equal(action.subscriber, null);
+describe("planResendWebhookEvent", () => {
+  it("plans broadcast email events for linking", () => {
+    const plan = planResendWebhookEvent(
+      event({ type: "email.opened", created_at: "2026-10-01T00:00:00Z", data: { ...baseData, broadcast_id: "b_1" } }),
+    );
+    assert.equal(plan.kind, "broadcast_email");
+    if (plan.kind === "broadcast_email") {
+      assert.equal(plan.broadcastId, "b_1");
+      assert.equal(plan.emailId, "e_1");
+      assert.equal(plan.change, null);
+    }
+    assert.equal(plan.eventCreatedAt, "2026-10-01T00:00:00Z");
   });
 
-  it("keeps the clicked link", () => {
-    const action = classifyResendWebhookEvent(
+  it("keeps only origin + path of clicked links", () => {
+    const plan = planResendWebhookEvent(
       event({
         type: "email.clicked",
         created_at: "",
-        data: { ...baseData, broadcast_id: "b_1", click: { link: "https://moz9.kr/x", ipAddress: "", timestamp: "", userAgent: "" } },
+        data: {
+          ...baseData,
+          broadcast_id: "b_1",
+          click: { link: "https://moz9.kr/post/1?token=secret#x", ipAddress: "1.2.3.4", timestamp: "", userAgent: "UA" },
+        },
       }),
     );
-    assert.equal(action.broadcast?.link, "https://moz9.kr/x");
+    assert.deepEqual(plan.metadata, { link: "https://moz9.kr/post/1" });
   });
 
-  it("ignores broadcast stats for non-broadcast (legacy/transactional) email events", () => {
-    const action = classifyResendWebhookEvent(event({ type: "email.delivered", created_at: "", data: baseData }));
-    assert.equal(action.broadcast, null);
-    assert.equal(action.subscriber, null);
+  it("ignores email events without a broadcast id (legacy newsletter or service mail)", () => {
+    const plan = planResendWebhookEvent(event({ type: "email.complained", created_at: "", data: baseData }));
+    assert.deepEqual(plan, { eventType: "email.complained", eventCreatedAt: "", metadata: {}, kind: "ignore", reason: "not_newsletter" });
   });
 
-  it("marks permanent bounces as BOUNCED", () => {
-    const action = classifyResendWebhookEvent(
-      event({ type: "email.bounced", created_at: "", data: { ...baseData, broadcast_id: "b_1", bounce: { type: "Permanent", subType: "General", message: "" } } }),
+  it("plans a permanent bounce as BOUNCED and records the bounce type", () => {
+    const plan = planResendWebhookEvent(
+      event({ type: "email.bounced", created_at: "", data: { ...baseData, broadcast_id: "b_1", bounce: { type: "Permanent", subType: "General", message: "m" } } }),
     );
-    assert.deepEqual(action.subscriber, { status: "BOUNCED", reason: "permanent_bounce", email: "kim@example.com" });
+    assert.equal(plan.kind, "broadcast_email");
+    if (plan.kind === "broadcast_email") {
+      assert.deepEqual(plan.change, { status: "BOUNCED", reason: "permanent_bounce", email: "kim@example.com" });
+    }
+    assert.deepEqual(plan.metadata, { bounce_type: "Permanent", bounce_sub_type: "General" });
   });
 
-  it("does not change subscribers for transient bounces", () => {
-    const action = classifyResendWebhookEvent(
-      event({ type: "email.bounced", created_at: "", data: { ...baseData, bounce: { type: "Transient", subType: "MailboxFull", message: "" } } }),
-    );
-    assert.equal(action.subscriber, null);
+  it("does not suppress transient or undetermined bounces", () => {
+    for (const type of ["Transient", "Undetermined", ""]) {
+      const plan = planResendWebhookEvent(
+        event({ type: "email.bounced", created_at: "", data: { ...baseData, broadcast_id: "b_1", bounce: { type, subType: "MailboxFull", message: "" } } }),
+      );
+      assert.equal(plan.kind === "broadcast_email" ? plan.change : "x", null, type);
+    }
   });
 
-  it("unsubscribes on spam complaints", () => {
-    const action = classifyResendWebhookEvent(event({ type: "email.complained", created_at: "", data: baseData }));
-    assert.deepEqual(action.subscriber, { status: "UNSUBSCRIBED", reason: "complaint", email: "kim@example.com" });
+  it("plans a complaint as UNSUBSCRIBED", () => {
+    const plan = planResendWebhookEvent(event({ type: "email.complained", created_at: "", data: { ...baseData, broadcast_id: "b_1" } }));
+    assert.equal(plan.kind, "broadcast_email");
+    if (plan.kind === "broadcast_email") {
+      assert.deepEqual(plan.change, { status: "UNSUBSCRIBED", reason: "complaint", email: "kim@example.com" });
+    }
   });
 
-  it("mirrors a Resend-side unsubscribe from contact.updated", () => {
-    const action = classifyResendWebhookEvent(
+  it("plans a Resend-side unsubscribe from contact.updated", () => {
+    const plan = planResendWebhookEvent(
       event({ type: "contact.updated", created_at: "", data: { id: "c_1", email: "Lee@Example.com", unsubscribed: true } }),
     );
-    assert.deepEqual(action.subscriber, { status: "UNSUBSCRIBED", reason: "resend_unsubscribe", email: "lee@example.com" });
+    assert.equal(plan.kind, "contact_unsubscribed");
+    if (plan.kind === "contact_unsubscribed") {
+      assert.deepEqual(plan.change, { status: "UNSUBSCRIBED", reason: "resend_unsubscribe", email: "lee@example.com" });
+      assert.equal(plan.contactId, "c_1");
+    }
+    assert.deepEqual(plan.metadata, { contact_id: "c_1" });
   });
 
   it("ignores contact updates that keep the contact subscribed", () => {
-    const action = classifyResendWebhookEvent(
+    const plan = planResendWebhookEvent(
       event({ type: "contact.updated", created_at: "", data: { id: "c_1", email: "lee@example.com", unsubscribed: false } }),
     );
-    assert.equal(action.subscriber, null);
+    assert.equal(plan.kind, "ignore");
   });
 
-  it("ignores unrelated events", () => {
-    const action = classifyResendWebhookEvent(event({ type: "domain.updated", created_at: "", data: {} }));
-    assert.deepEqual(action, { type: "domain.updated", broadcast: null, subscriber: null });
+  it("ignores unknown event types", () => {
+    for (const type of ["domain.updated", "contact.deleted", "email.received", "something.new"]) {
+      const plan = planResendWebhookEvent(event({ type, created_at: "", data: {} }));
+      assert.equal(plan.kind, "ignore", type);
+    }
+  });
+
+  it("ignores broadcast events without an email id", () => {
+    const plan = planResendWebhookEvent(event({ type: "email.delivered", created_at: "", data: { broadcast_id: "b_1", to: [] } }));
+    assert.equal(plan.kind, "ignore");
   });
 });
 
-describe("describeWebhookAction", () => {
-  it("never includes email addresses", () => {
-    const action = classifyResendWebhookEvent(event({ type: "email.complained", created_at: "", data: { ...baseData, broadcast_id: "b_1" } }));
-    const text = describeWebhookAction(action);
-    assert.equal(text, "email.complained broadcast=b_1 event=complained subscriber→UNSUBSCRIBED(complaint)");
+describe("sanitizeLink", () => {
+  it("drops query, hash and non-http links", () => {
+    assert.equal(sanitizeLink("https://moz9.kr/a/b?x=1"), "https://moz9.kr/a/b");
+    assert.equal(sanitizeLink("mailto:kim@example.com"), null);
+    assert.equal(sanitizeLink("not a url"), null);
+    assert.equal(sanitizeLink(undefined), null);
+  });
+});
+
+describe("describeWebhookPlan", () => {
+  it("never includes email addresses or links", () => {
+    const plan = planResendWebhookEvent(event({ type: "email.complained", created_at: "", data: { ...baseData, broadcast_id: "b_1" } }));
+    const text = describeWebhookPlan(plan);
+    assert.equal(text, "email.complained broadcast_email broadcast=b_1 subscriber→UNSUBSCRIBED(complaint)");
     assert.equal(/@/.test(text), false);
   });
 });
