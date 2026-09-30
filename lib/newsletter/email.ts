@@ -159,6 +159,20 @@ export function personalizeEmail(
   return html;
 }
 
+// Broadcast mode (3단계): one HTML for the whole segment, so nothing
+// per-recipient can go in —
+//   - our unsubscribe link is replaced by Resend's placeholder (the single
+//     unsubscribe link in a Broadcast email; Resend handles the opt-out and
+//     the List-Unsubscribe headers),
+//   - our open pixel is dropped and links are left unwrapped: both need a
+//     per-delivery tracking_token that Broadcasts don't have.
+// The legacy path keeps using personalizeEmail.
+export function toBroadcastHtml(templateHtml: string, resendUnsubscribePlaceholder: string): string {
+  return templateHtml
+    .replaceAll(UNSUBSCRIBE_URL_PLACEHOLDER, resendUnsubscribePlaceholder)
+    .replace(/[ \t]*<img src="__NEWSLETTER_OPEN_PIXEL__"[^>]*\/>\n?/g, "");
+}
+
 export function chunk<T>(items: T[], size: number): T[][] {
   const result: T[][] = [];
   for (let i = 0; i < items.length; i += size) {

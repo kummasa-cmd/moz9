@@ -12,6 +12,8 @@ import { newsletterConfig } from "./config";
 import { buildEmailTemplate, chunk, getResendClient, personalizeEmail } from "./email";
 import { campaignStatusAfterRun, isCampaignDue, type DueCampaign } from "./campaign-due";
 import { kstDateString } from "./schedule-time";
+import { resolveDeliveryMode, selectCampaignDeliveryPath } from "./delivery-mode";
+import { sendClaimedCampaignViaBroadcast } from "./broadcast-sender";
 
 // Resend's batch endpoint accepts at most 100 emails per call.
 const SEND_BATCH_SIZE = 100;
@@ -29,7 +31,8 @@ type DeliveryRow = {
 };
 
 export type ProcessCampaignResult =
-  | { ok: true; sent: number; recipients: number; failed: number }
+  // broadcastId is set only when the run went out as a Resend Broadcast.
+  | { ok: true; sent: number; recipients: number; failed: number; broadcastId?: string }
   | { ok: false; error: string; skipped?: boolean };
 
 // "schedule": cron / immediate-after-save — sends only if the campaign is
@@ -116,11 +119,24 @@ export async function processCampaign(
     return { ok: false, error: "RESEND_API_KEY 또는 NEWSLETTER_SENDER_EMAIL이 설정되지 않았습니다." };
   }
 
+  // NEWSLETTER_DELIVERY_MODE (default legacy) picks the send path; see
+  // delivery-mode.ts. Promotional and tag-targeted campaigns always stay
+  // on legacy.
+  const delivery = selectCampaignDeliveryPath({
+    mode: resolveDeliveryMode(),
+    audience: campaign.audience,
+    targetAll: campaign.target_all,
+    targetTags: campaign.target_tags,
+  });
+
   if (!(await claimCampaign(db, campaign, trigger, now))) {
     return { ok: false, skipped: true, error: "이미 발송 중이거나 발송 대기 상태가 아닌 캠페인입니다." };
   }
 
   try {
+    if (delivery.path === "broadcast") {
+      return await sendClaimedCampaignViaBroadcast(db, campaign, newsletter, now);
+    }
     return await sendClaimedCampaign(db, campaign, newsletter, now);
   } catch (err) {
     // Anything thrown after the claim (DB errors loading recipients, creating
