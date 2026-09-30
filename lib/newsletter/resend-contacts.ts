@@ -58,6 +58,19 @@ export function isContactUnsubscribed(status: string, suppressed = false): boole
   return status !== "SUBSCRIBED" || suppressed;
 }
 
+// True when the address was put on the do-not-contact list after the row's
+// last successful Resend sync — i.e. Resend may still have the Contact as
+// subscribed. Some paths add a suppression without touching the subscriber
+// row (e.g. a promotional-newsletter unsubscribe for an address that is also
+// a subscriber), so resend_synced_at alone can't tell such a row is stale.
+// Timestamps are the DB's own (newsletter_suppressions.unsubscribed_at
+// defaults to now()); equal times count as in sync.
+export function isSuppressionNewerThanSync(syncedAt: string | null, suppressedAt: string | null): boolean {
+  if (!suppressedAt) return false;
+  if (!syncedAt) return true;
+  return new Date(suppressedAt).getTime() > new Date(syncedAt).getTime();
+}
+
 // Masks anything shaped like an email address, for console output.
 export function redactEmails(text: string): string {
   return text.replace(/[^\s"'/<>@]+@[^\s"'/<>,;]+/g, "<email>");

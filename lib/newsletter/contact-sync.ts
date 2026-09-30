@@ -1,9 +1,11 @@
 import { Resend } from "resend";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllRows } from "./paginate";
 import {
   installSdkErrorLogger,
   isContactUnsubscribed,
+  isSuppressionNewerThanSync,
   redactEmails,
   upsertResendContact,
   type ContactSyncResult,
@@ -199,10 +201,59 @@ export type PendingSyncSummary = {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-// Retries subscribers whose Resend Contact is not in sync (resend_sync_error
-// set or resend_synced_at NULL). Meant for a cron route separate from
-// send-due: small batches, paced requests, and it stands down while a
-// campaign is sending so it can't eat into the send path's rate limit.
+// The retry queue: rows flagged pending (PENDING_SYNC_FILTER), plus SUBSCRIBED
+// rows whose address was suppressed after their last successful sync — those
+// look synced but Resend may still have them subscribed (see
+// isSuppressionNewerThanSync). Pending rows keep their order and come first;
+// duplicates are dropped; the total is capped at `limit`.
+export function buildContactSyncQueue(
+  pending: SubscriberSyncRow[],
+  suppressedSubscribed: SubscriberSyncRow[],
+  suppressedAt: Map<string, string>,
+  limit: number,
+): SubscriberSyncRow[] {
+  const queue = [...pending];
+  const seen = new Set(pending.map((row) => row.id));
+  for (const row of suppressedSubscribed) {
+    if (seen.has(row.id)) continue;
+    if (row.status !== "SUBSCRIBED") continue;
+    if (!isSuppressionNewerThanSync(row.resend_synced_at, suppressedAt.get(row.email) ?? null)) continue;
+    queue.push(row);
+    seen.add(row.id);
+  }
+  return queue.slice(0, limit);
+}
+
+const SUPPRESSION_LOOKUP_CHUNK = 200;
+
+// SUBSCRIBED rows that are on the suppression list, with each address's
+// suppression time. Paged, so a long list is never silently truncated.
+async function loadSuppressedSubscribers(
+  db: SupabaseClient,
+): Promise<{ rows: SubscriberSyncRow[]; suppressedAt: Map<string, string> }> {
+  const suppressions = await fetchAllRows<{ email: string; unsubscribed_at: string }>((from, to) =>
+    db.from("newsletter_suppressions").select("email, unsubscribed_at").order("id").range(from, to),
+  );
+  const suppressedAt = new Map(suppressions.map((s) => [s.email, s.unsubscribed_at]));
+  const emails = [...suppressedAt.keys()];
+  const rows: SubscriberSyncRow[] = [];
+  for (let i = 0; i < emails.length; i += SUPPRESSION_LOOKUP_CHUNK) {
+    const { data, error } = await db
+      .from("newsletter_subscribers")
+      .select(SUBSCRIBER_SYNC_COLUMNS)
+      .eq("status", "SUBSCRIBED")
+      .in("email", emails.slice(i, i + SUPPRESSION_LOOKUP_CHUNK));
+    if (error) throw new Error(error.message);
+    rows.push(...((data ?? []) as SubscriberSyncRow[]));
+  }
+  return { rows, suppressedAt };
+}
+
+// Retries subscribers whose Resend Contact may not be in sync: resend_sync_error
+// set, resend_synced_at NULL, or suppressed after the last sync. Meant for a
+// cron route separate from send-due (.github/workflows/newsletter-contact-sync.yml):
+// small batches, paced requests, and it stands down while a campaign is
+// sending so it can't eat into the send path's rate limit.
 // Does not touch newsletter_campaigns / deliveries.
 export async function retryPendingContactSyncs(
   options: { limit?: number; delayMs?: number } = {},
@@ -227,8 +278,11 @@ export async function retryPendingContactSyncs(
     .limit(limit);
   if (error) throw new Error(error.message);
 
+  const suppressed = await loadSuppressedSubscribers(db);
+  const queue = buildContactSyncQueue((data ?? []) as SubscriberSyncRow[], suppressed.rows, suppressed.suppressedAt, limit);
+
   const client = createContactsClient();
-  for (const row of (data ?? []) as SubscriberSyncRow[]) {
+  for (const row of queue) {
     // Never-synced unsubscribed rows are a no-op lookup at most (see
     // createIfMissing) — still run them so they stop showing as pending.
     if (summary.attempted > 0) await sleep(delayMs);

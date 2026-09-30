@@ -180,9 +180,16 @@ export default function NewsletterSendTable({
                 </TableCell>
                 <TableCell>
                   {n.campaign ? (
-                    <Badge variant={campaignVariant(n.campaign.status)}>
-                      {CAMPAIGN_STATUS_LABEL[n.campaign.status] ?? n.campaign.status}
-                    </Badge>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant={campaignVariant(n.campaign.status)}>
+                        {CAMPAIGN_STATUS_LABEL[n.campaign.status] ?? n.campaign.status}
+                      </Badge>
+                      {n.campaign.lastError && (
+                        <p className="max-w-xs text-xs text-destructive break-words" title={n.campaign.lastError}>
+                          {n.campaign.lastError}
+                        </p>
+                      )}
+                    </div>
                   ) : (
                     <span className="text-muted-foreground/40">-</span>
                   )}

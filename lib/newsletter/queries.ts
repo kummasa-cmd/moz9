@@ -326,8 +326,10 @@ async function getSubscribedEmailSet(): Promise<Set<string>> {
   return new Set((data ?? []).map((row) => row.email as string));
 }
 
-// subscriberId is set only for regular-newsletter subscribers — prospects
-// aren't mirrored to Resend Contacts, so the caller syncs only when present.
+// subscriberId: the regular-newsletter subscriber whose Resend Contact must
+// now be re-synced (the caller syncs only when present). Prospects aren't
+// mirrored to Resend Contacts, but a prospect address can also be a
+// subscriber — then that subscriber is returned too.
 export type UnsubscribeResult =
   | { ok: true; email: string; subscriberId: string | null }
   | { ok: false; error: string };
@@ -366,8 +368,24 @@ export async function unsubscribeByToken(token: string): Promise<UnsubscribeResu
     .maybeSingle();
 
   if (prospect) {
-    await addToSuppressionList(prospect.email as string);
-    return { ok: true, email: prospect.email as string, subscriberId: null };
+    const email = prospect.email as string;
+    await addToSuppressionList(email);
+
+    // The same address may also be a SUBSCRIBED regular subscriber. The
+    // suppression makes it ineligible, so its Resend Contact must become
+    // unsubscribed too: mark it stale (retry queue) and hand it back for the
+    // immediate sync. Status stays SUBSCRIBED — only the suppression changed,
+    // same as before.
+    const { data: alsoSubscriber, error: staleError } = await db
+      .from("newsletter_subscribers")
+      .update({ resend_synced_at: null })
+      .eq("email", email)
+      .eq("status", "SUBSCRIBED")
+      .select("id")
+      .maybeSingle();
+    if (staleError) console.error("[newsletter] 구독자 Resend 동기화 표시 초기화 실패:", staleError.message);
+
+    return { ok: true, email, subscriberId: (alsoSubscriber?.id as string | undefined) ?? null };
   }
 
   return { ok: false, error: "이미 처리되었거나 유효하지 않은 링크입니다." };

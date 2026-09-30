@@ -1,6 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { executeBroadcastRun, type BroadcastRunInput, type BroadcastRunStore, type ReserveInput } from "./broadcast-sender";
+import {
+  executeBroadcastRun,
+  sendClaimedCampaignViaBroadcast,
+  type BroadcastRunInput,
+  type BroadcastRunStore,
+  type ReserveInput,
+} from "./broadcast-sender";
+import type { PreflightResult } from "./broadcast-preflight";
 import { RESEND_UNSUBSCRIBE_PLACEHOLDER, type ResendBroadcastsClient } from "./resend-broadcasts";
 import { buildEmailTemplate, personalizeEmail, toBroadcastHtml } from "./email";
 
@@ -254,5 +261,154 @@ describe("toBroadcastHtml", () => {
     assert.ok(html.includes("/api/track/click/tok?url="));
     assert.ok(html.includes("/newsletter/unsubscribe?token=unsub"));
     assert.equal(html.includes(RESEND_UNSUBSCRIBE_PLACEHOLDER), false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// sendClaimedCampaignViaBroadcast + preflight (B1)
+// ---------------------------------------------------------------------------
+
+type CampaignUpdate = { table: string; patch: Record<string, unknown> };
+
+function campaignDb() {
+  const updates: CampaignUpdate[] = [];
+  const db = {
+    from(table: string) {
+      return {
+        update(patch: Record<string, unknown>) {
+          updates.push({ table, patch });
+          const chain = {
+            eq: () => chain,
+            then: (resolve: (value: { error: null }) => void) => resolve({ error: null }),
+          };
+          return chain;
+        },
+      };
+    },
+  };
+  return { db: db as unknown as Parameters<typeof sendClaimedCampaignViaBroadcast>[0], updates };
+}
+
+function passing(): PreflightResult {
+  return { ok: true, blocking: [], warnings: [], eligible: 96, segmentSubscribed: 96 };
+}
+
+function blocked(): PreflightResult {
+  return {
+    ok: false,
+    blocking: [{ code: "RESEND_SUBSCRIBED_NOT_ELIGIBLE", count: 1, sampleIds: ["sub-0001-aaaa"] }],
+    warnings: [],
+    eligible: 95,
+    segmentSubscribed: 96,
+  };
+}
+
+function orchestration(preflight: PreflightResult, now = new Date("2026-10-01T00:30:00Z")) {
+  const order: string[] = [];
+  const { store, rows } = memoryStore();
+  const { client, calls } = fakeClient();
+  const deps = {
+    createClient: () => client as never,
+    runPreflight: async () => {
+      order.push("preflight");
+      return preflight;
+    },
+    loadTiming: async () => ({
+      send_type: "SCHEDULED",
+      scheduled_at: "2026-10-01T00:00:00Z",
+      recurring_time: null,
+      created_at: "2026-09-29T00:00:00Z",
+    }),
+    getRecipientCount: async () => {
+      order.push("recipients");
+      return 96;
+    },
+    assignIssueNumber: async () => {
+      order.push("issue");
+      return 10;
+    },
+    renderHtml: async () => {
+      order.push("render");
+      return `<p>hi</p><a href="${RESEND_UNSUBSCRIBE_PLACEHOLDER}">수신거부</a>`;
+    },
+    createStore: () => {
+      const wrapped = { ...store, reserve: async (input: ReserveInput) => (order.push("reserve"), store.reserve(input)) };
+      return wrapped;
+    },
+    recordUsage: async () => {
+      order.push("usage");
+    },
+  };
+  return { deps, order, calls, rows, now };
+}
+
+const campaign = { id: "11111111-2222-3333-4444-555555555555", send_type: "SCHEDULED", range_end: null, audience: "SUBSCRIBERS" };
+const newsletter = { id: "nl_1", slug: "issue-10", subject: "검레터", blocks: [], published_at: null };
+
+function withSegmentEnv<T>(fn: () => Promise<T>): Promise<T> {
+  const saved = { prod: process.env.RESEND_NEWSLETTER_SEGMENT_ID, test: process.env.RESEND_TEST_SEGMENT_ID };
+  process.env.RESEND_NEWSLETTER_SEGMENT_ID = "seg_prod";
+  delete process.env.RESEND_TEST_SEGMENT_ID;
+  const originalError = console.error;
+  console.error = () => {};
+  return fn().finally(() => {
+    console.error = originalError;
+    if (saved.prod === undefined) delete process.env.RESEND_NEWSLETTER_SEGMENT_ID;
+    else process.env.RESEND_NEWSLETTER_SEGMENT_ID = saved.prod;
+    if (saved.test !== undefined) process.env.RESEND_TEST_SEGMENT_ID = saved.test;
+  });
+}
+
+describe("sendClaimedCampaignViaBroadcast — preflight", () => {
+  it("a blocked preflight makes zero Broadcast API calls, reserves nothing and assigns no issue number", async () => {
+    const o = orchestration(blocked());
+    const { db, updates } = campaignDb();
+    const result = await withSegmentEnv(() => sendClaimedCampaignViaBroadcast(db, campaign, newsletter, o.now, o.deps));
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(o.order, ["preflight"]);
+    assert.equal(o.calls.create, 0);
+    assert.equal(o.calls.send.length, 0);
+    assert.equal(o.rows.length, 0);
+
+    // Within 2h of the due time: back to SCHEDULED for the next send-due run.
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0].patch.status, "SCHEDULED");
+    const lastError = String(updates[0].patch.last_error);
+    assert.match(lastError, /^\[preflight\] Broadcast 발송 차단: Resend 구독인데 Supabase 수신 비대상 1건/);
+    assert.match(lastError, /자동 재시도 \(~11:00 KST까지\)/);
+    assert.equal(lastError.includes("@"), false);
+  });
+
+  it("after the retry window a blocked campaign becomes FAILED", async () => {
+    const o = orchestration(blocked(), new Date("2026-10-01T03:00:00Z"));
+    const { db, updates } = campaignDb();
+    await withSegmentEnv(() => sendClaimedCampaignViaBroadcast(db, campaign, newsletter, o.now, o.deps));
+    assert.equal(updates[0].patch.status, "FAILED");
+    assert.match(String(updates[0].patch.last_error), /관리자 확인 필요/);
+    assert.equal(o.calls.create, 0);
+  });
+
+  it("a passing preflight enters the existing Broadcast flow, preflight first", async () => {
+    const o = orchestration(passing());
+    const { db, updates } = campaignDb();
+    const result = await withSegmentEnv(() => sendClaimedCampaignViaBroadcast(db, campaign, newsletter, o.now, o.deps));
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(o.order, ["preflight", "recipients", "issue", "render", "reserve", "usage"]);
+    assert.equal(o.calls.create, 1);
+    assert.equal(o.calls.send.length, 1);
+    assert.equal(o.rows[0].status, "SEND_REQUESTED");
+    const final = updates[updates.length - 1].patch;
+    assert.equal(final.status, "SENT");
+    assert.equal(final.last_error, null);
+  });
+
+  it("a zero-recipient run is still checked by the preflight first", async () => {
+    const o = orchestration(blocked());
+    o.deps.getRecipientCount = async () => 0;
+    const { db } = campaignDb();
+    await withSegmentEnv(() => sendClaimedCampaignViaBroadcast(db, campaign, newsletter, o.now, o.deps));
+    assert.deepEqual(o.order, ["preflight"]);
   });
 });

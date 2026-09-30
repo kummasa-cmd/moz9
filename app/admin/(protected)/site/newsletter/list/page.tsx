@@ -35,7 +35,7 @@ export default async function AdminNewsletterListPage({ searchParams }: Props) {
     ? await supabase
         .from("newsletter_campaigns")
         .select(
-          "id, newsletter_id, name, send_type, status, scheduled_at, recurring_time, range_start, range_end, target_all, target_tags, total_recipients, total_sent, created_at",
+          "id, newsletter_id, name, send_type, status, scheduled_at, recurring_time, range_start, range_end, target_all, target_tags, total_recipients, total_sent, last_error, created_at",
         )
         .in("newsletter_id", newsletterIds)
         .order("created_at", { ascending: false })
@@ -58,6 +58,7 @@ export default async function AdminNewsletterListPage({ searchParams }: Props) {
       targetTags: (c.target_tags as string[] | null) ?? [],
       totalRecipients: (c.total_recipients as number | null) ?? 0,
       totalSent: (c.total_sent as number | null) ?? 0,
+      lastError: (c.last_error as string | null) ?? null,
     });
   }
 

@@ -26,6 +26,9 @@ export type CampaignSummary = {
   targetTags: string[];
   totalRecipients: number;
   totalSent: number;
+  // Latest send error, e.g. a Broadcast preflight block. Never contains an
+  // email address (see lib/newsletter/broadcast-preflight.ts).
+  lastError?: string | null;
 };
 
 export type NewsletterSendRow = {

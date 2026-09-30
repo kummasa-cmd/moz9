@@ -22,8 +22,17 @@ import {
   broadcastName,
   broadcastRunKey,
   decideExistingBroadcastRun,
+  formatKstTime,
+  preflightBlockedOutcome,
+  type CampaignTiming,
   type ExistingBroadcastRun,
 } from "./broadcast-run";
+import {
+  describePreflightIssues,
+  runBroadcastPreflight,
+  type PreflightResult,
+  type SegmentContactsClient,
+} from "./broadcast-preflight";
 import type { ProcessCampaignResult } from "./scheduler";
 
 // Broadcast send path for the regular newsletter (3단계). Only reached when
@@ -277,15 +286,55 @@ export type BroadcastNewsletter = {
   published_at: string | null;
 };
 
+export type BroadcastCampaignDeps = {
+  createClient: () => ResendBroadcastsClient & SegmentContactsClient;
+  runPreflight: (db: AdminClient, client: SegmentContactsClient, segmentId: string) => Promise<PreflightResult>;
+  loadTiming: (db: AdminClient, campaignId: string) => Promise<CampaignTiming>;
+  getRecipientCount: () => Promise<number>;
+  assignIssueNumber: (newsletterId: string) => Promise<number | null>;
+  renderHtml: (newsletter: BroadcastNewsletter, issueNumber: number | null) => Promise<string>;
+  createStore: (db: AdminClient) => BroadcastRunStore;
+  recordUsage: (postIds: string[]) => Promise<void>;
+};
+
+async function loadCampaignTiming(db: AdminClient, campaignId: string): Promise<CampaignTiming> {
+  const { data, error } = await db
+    .from("newsletter_campaigns")
+    .select("send_type, scheduled_at, recurring_time, created_at")
+    .eq("id", campaignId)
+    .single();
+  if (error) throw new Error(`캠페인 일정 조회 실패: ${error.message}`);
+  return data as CampaignTiming;
+}
+
+const defaultDeps: BroadcastCampaignDeps = {
+  createClient: () => createBroadcastsClient(),
+  runPreflight: (db, client, segmentId) => runBroadcastPreflight(db, client, segmentId),
+  loadTiming: loadCampaignTiming,
+  getRecipientCount: async () => (await getTargetSubscribers({ targetAll: true, targetTags: [] })).length,
+  assignIssueNumber: assignNewsletterIssueNumber,
+  renderHtml: renderBroadcastHtml,
+  createStore: createBroadcastRunStore,
+  recordUsage: recordBoardPostNewsletterUsage,
+};
+
 // Called by processCampaign after it has claimed the campaign (SENDING).
 // Throws on failure; processCampaign's catch marks the campaign FAILED with
-// the message, same as for the legacy path.
+// the message, same as for the legacy path. A preflight block is handled
+// here instead (SCHEDULED for a retry, or FAILED) and returned as ok:false.
+//
+// Order matters: the preflight runs before anything with a side effect —
+// before the run row is reserved, the issue number assigned, or any
+// Broadcast API call — so a blocked send leaves no trace but last_error.
 export async function sendClaimedCampaignViaBroadcast(
   db: AdminClient,
   campaign: BroadcastCampaign,
   newsletter: BroadcastNewsletter,
   now: Date,
+  overrides: Partial<BroadcastCampaignDeps> = {},
 ): Promise<ProcessCampaignResult> {
+  const deps = { ...defaultDeps, ...overrides };
+
   // Belt and braces — selectCampaignDeliveryPath already keeps these out.
   if (campaign.audience !== "SUBSCRIBERS") {
     throw new Error("홍보 뉴스레터는 Broadcast로 발송하지 않습니다.");
@@ -294,10 +343,35 @@ export async function sendClaimedCampaignViaBroadcast(
   const segment = resolveBroadcastSegment("campaign");
   if (!segment.ok) throw new Error(segment.error);
 
+  const client = deps.createClient();
+
+  const preflight = await deps.runPreflight(db, client, segment.segmentId);
+  if (!preflight.ok) {
+    const timing = await deps.loadTiming(db, campaign.id);
+    const outcome = preflightBlockedOutcome(timing, now);
+    const reason = describePreflightIssues(preflight.blocking);
+    const next =
+      outcome.status === "SCHEDULED"
+        ? `Contact 동기화 복구 후 자동 재시도 (~${formatKstTime(outcome.retryUntil)}까지)`
+        : "자동 재시도 시간 초과 — 관리자 확인 필요";
+    const lastError = truncate(`[preflight] Broadcast 발송 차단: ${reason} · ${next}`);
+
+    const { error } = await db
+      .from("newsletter_campaigns")
+      .update({ status: outcome.status, last_error: lastError })
+      .eq("id", campaign.id);
+    if (error) throw new Error(`Broadcast 사전 점검 결과 기록 실패: ${error.message}`);
+
+    console.error("[newsletter] Broadcast preflight blocked:", campaign.id, outcome.status, reason);
+    return { ok: false, error: lastError };
+  }
+  if (preflight.warnings.length > 0) {
+    console.warn("[newsletter] Broadcast preflight warnings:", campaign.id, describePreflightIssues(preflight.warnings));
+  }
+
   // The segment mirrors exactly these rows (SUBSCRIBED, not suppressed) via
   // the 2단계 Contact sync; the count is kept as the run's estimate.
-  const recipients = await getTargetSubscribers({ targetAll: true, targetTags: [] });
-  const estimate = recipients.length;
+  const estimate = await deps.getRecipientCount();
 
   await db.from("newsletter_campaigns").update({ total_recipients: estimate }).eq("id", campaign.id);
 
@@ -315,8 +389,8 @@ export async function sendClaimedCampaignViaBroadcast(
     return { ok: true, sent: 0, recipients: 0, failed: 0 };
   }
 
-  const issueNumber = await assignNewsletterIssueNumber(newsletter.id);
-  const html = await renderBroadcastHtml(newsletter, issueNumber);
+  const issueNumber = await deps.assignIssueNumber(newsletter.id);
+  const html = await deps.renderHtml(newsletter, issueNumber);
 
   const result = await executeBroadcastRun(
     {
@@ -327,7 +401,7 @@ export async function sendClaimedCampaignViaBroadcast(
       recipientEstimate: estimate,
       content: { from: newsletterFromAddress(), subject: newsletter.subject, html },
     },
-    { store: createBroadcastRunStore(db), client: createBroadcastsClient() },
+    { store: deps.createStore(db), client },
   );
 
   if (!result.ok) throw new Error(result.error);
@@ -352,7 +426,7 @@ export async function sendClaimedCampaignViaBroadcast(
     })
     .eq("id", campaign.id);
 
-  await recordBoardPostNewsletterUsage(getSourcePostIds((newsletter.blocks as ContentBlock[] | null) ?? []));
+  await deps.recordUsage(getSourcePostIds((newsletter.blocks as ContentBlock[] | null) ?? []));
 
   return { ok: true, sent: estimate, recipients: estimate, failed: 0, broadcastId: result.broadcastId };
 }
