@@ -11,8 +11,6 @@ const EMAIL_PATTERN = /^\S+@\S+$/;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_NAME_LENGTH = 100;
 
-export type { SubscribeActionResult };
-
 // Server-side replacement for the old browser-side anon insert, so a
 // returning (previously unsubscribed) email is re-subscribed instead of
 // failing on the unique constraint — see lib/newsletter/queries.ts::subscribe

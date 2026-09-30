@@ -5,10 +5,8 @@ import { useForm } from "react-hook-form";
 import { Mail, CheckCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  subscribeToNewsletter,
-  type SubscribeActionResult,
-} from "@/app/(site)/newsletter/subscribe/actions";
+import { subscribeToNewsletter } from "@/app/(site)/newsletter/subscribe/actions";
+import type { SubscribeActionResult } from "@/lib/newsletter/subscribe-flow";
 
 type FormValues = {
   email: string;
