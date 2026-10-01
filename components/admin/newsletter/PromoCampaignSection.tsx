@@ -18,6 +18,10 @@ type Props = {
   defaultRecurringTime?: string;
   defaultRangeStart?: string;
   defaultRangeEnd?: string;
+  // Set when the campaign already went out (or is going out): the send
+  // settings are shown read-only and not submitted. The server action
+  // enforces the same rule (lib/newsletter/campaign-save.ts).
+  lockedReason?: string | null;
 };
 
 export function PromoCampaignSection({
@@ -29,9 +33,19 @@ export function PromoCampaignSection({
   defaultRecurringTime = "09:00",
   defaultRangeStart = "",
   defaultRangeEnd = "",
+  lockedReason = null,
 }: Props) {
   const [enabled, setEnabled] = useState(defaultEnabled);
   const [sendType, setSendType] = useState(defaultSendType);
+
+  if (lockedReason) {
+    return (
+      <div className="rounded-xl border border-border bg-white p-6 space-y-2">
+        <p className="text-sm font-semibold text-foreground">발송 예약 설정</p>
+        <p className="text-sm text-muted-foreground rounded-md bg-muted/50 px-3 py-2">{lockedReason}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-border bg-white p-6 space-y-6">

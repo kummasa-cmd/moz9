@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { processCampaign } from "@/lib/newsletter/scheduler";
+import { cancelScheduledCampaign } from "@/lib/newsletter/campaign-save";
 
 export async function deleteNewsletter(formData: FormData) {
   const id = String(formData.get("id") ?? "");
@@ -30,8 +31,10 @@ export async function deleteNewsletters(formData: FormData) {
 export async function cancelCampaign(formData: FormData) {
   const id = String(formData.get("id") ?? "");
 
-  const supabase = createAdminClient();
-  await supabase.from("newsletter_campaigns").update({ status: "CANCELLED" }).eq("id", id);
+  // SCHEDULED only, enforced in the UPDATE itself — the button is shown only
+  // for SCHEDULED campaigns, but the action can be called directly.
+  const cancelled = await cancelScheduledCampaign(createAdminClient(), id);
+  if (!cancelled) console.warn("[newsletter] cancel ignored, campaign is not SCHEDULED:", id);
 
   revalidatePath("/admin/site/newsletter/list");
   revalidatePath("/admin/site/newsletter/promo/list");

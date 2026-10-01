@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 // Minimal in-memory stand-in for the supabase-js query builder, covering only
 // what lib/newsletter/scheduler.ts uses: select / update / upsert / insert
 // with eq / neq / in / or("col.is.null,col.neq.x") filters, maybeSingle /
-// single, and awaiting the builder directly. Test-only.
+// single, head-only counts ({ count: "exact", head: true }), and awaiting the
+// builder directly. Test-only.
 
 type Row = Record<string, unknown>;
 type Filter = (row: Row) => boolean;
@@ -25,13 +26,15 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null; count?: num
   private payload: Row | Row[] | null = null;
   private onConflict: string[] = [];
   private mode: "many" | "maybeSingle" | "single" = "many";
+  private countOnly = false;
 
   constructor(
     private readonly db: FakeSupabase,
     private readonly table: string,
   ) {}
 
-  select(): this {
+  select(_columns?: string, opts?: { count?: string; head?: boolean }): this {
+    if (opts?.head) this.countOnly = true;
     return this;
   }
   update(values: Row): this {
@@ -117,11 +120,15 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null; count?: num
     onfulfilled?: ((value: { data: unknown; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2> {
-    let result: { data: unknown; error: null };
+    let result: { data: unknown; error: null; count?: number };
     try {
       const rows = this.run();
-      const data = this.mode === "many" ? rows : (rows[0] ?? null);
-      result = { data, error: null };
+      if (this.countOnly) {
+        result = { data: null, error: null, count: rows.length };
+      } else {
+        const data = this.mode === "many" ? rows : (rows[0] ?? null);
+        result = { data, error: null };
+      }
     } catch (err) {
       return Promise.reject(err).then(undefined, onrejected);
     }

@@ -63,6 +63,9 @@ export type CampaignScheduleFields = {
   range_end: string | null;
   target_all: boolean;
   target_tags: string[];
+  // Set by the promotional editor (always PROSPECTS); the regular editor
+  // leaves it to the column default.
+  audience?: "SUBSCRIBERS" | "PROSPECTS";
 };
 
 // The original booking survives a switch to another send type (e.g. a
@@ -198,4 +201,20 @@ export function createCampaignSaveStore(db: SupabaseClient): CampaignSaveStore {
       return data.id as string;
     },
   };
+}
+
+// The list's "발송 취소" button. Only a campaign that is still waiting
+// (SCHEDULED) can be cancelled: cancelling a SENT one would relabel a sent
+// campaign, and cancelling a SENDING one would race the run in progress.
+// Returns whether a campaign was cancelled.
+export async function cancelScheduledCampaign(db: SupabaseClient, campaignId: string): Promise<boolean> {
+  const { data, error } = await db
+    .from("newsletter_campaigns")
+    .update({ status: "CANCELLED" })
+    .eq("id", campaignId)
+    .eq("status", "SCHEDULED")
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data !== null;
 }

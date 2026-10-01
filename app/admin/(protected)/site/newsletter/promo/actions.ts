@@ -5,6 +5,11 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { processCampaign } from "@/lib/newsletter/scheduler";
 import { kstDatetimeLocalToUtcIso } from "@/lib/newsletter/schedule-time";
+import {
+  createCampaignSaveStore,
+  saveCampaignSchedule,
+  type CampaignSaveResult,
+} from "@/lib/newsletter/campaign-save";
 import type { ContentBlock } from "@/lib/newsletter/blocks/types";
 
 function parseBlocks(raw: FormDataEntryValue | null): ContentBlock[] {
@@ -103,44 +108,44 @@ export async function savePromoNewsletter(id: string | null, formData: FormData)
       redirect(`${afterSaveEditUrl}?error=${encodeURIComponent("발송 기간을 선택해 주세요.")}`);
     }
 
-    const campaignFields = {
-      newsletter_id: newsletterId,
-      name: campaign_name,
-      send_type,
-      scheduled_at,
-      recurring_time,
-      range_start,
-      range_end,
-      target_all: true,
-      target_tags: [],
-      audience: "PROSPECTS",
-    };
-
-    let campaignId = existingCampaignId;
-
-    if (existingCampaignId) {
-      const { error } = await supabase
-        .from("newsletter_campaigns")
-        .update({ ...campaignFields, status: "SCHEDULED" })
-        .eq("id", existingCampaignId);
-
-      if (error) redirect(`${afterSaveEditUrl}?error=${encodeURIComponent(error.message)}`);
-    } else {
-      const { data: insertedCampaign, error } = await supabase
-        .from("newsletter_campaigns")
-        .insert({ ...campaignFields, status: "SCHEDULED" })
-        .select("id")
-        .single();
-
-      if (error) redirect(`${afterSaveEditUrl}?error=${encodeURIComponent(error.message)}`);
-      campaignId = insertedCampaign?.id ?? null;
+    // Same server-side resend guard as the regular editor (see
+    // lib/newsletter/campaign-save.ts): a SENT / PARTIAL / SENDING campaign,
+    // or a one-shot one that already reached someone, keeps its send
+    // settings and is never sent again from here. Content above is saved.
+    let saveResult: CampaignSaveResult;
+    try {
+      saveResult = await saveCampaignSchedule(
+        createCampaignSaveStore(supabase),
+        {
+          existingCampaignId,
+          fields: {
+            newsletter_id: newsletterId!,
+            name: campaign_name,
+            send_type,
+            scheduled_at,
+            recurring_time,
+            range_start,
+            range_end,
+            target_all: true,
+            target_tags: [],
+            audience: "PROSPECTS",
+          },
+        },
+        (campaignId) => processCampaign(campaignId),
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "캠페인 저장에 실패했습니다.";
+      redirect(`${afterSaveEditUrl}?error=${encodeURIComponent(message)}`);
     }
 
-    if (send_type === "IMMEDIATE" && campaignId) {
-      const result = await processCampaign(campaignId);
-      if (!result.ok) {
-        redirect(`${afterSaveEditUrl}?error=${encodeURIComponent(`발송 실패: ${result.error}`)}`);
-      }
+    if (saveResult.kind === "locked") {
+      console.warn("[newsletter] promo campaign send settings left unchanged:", saveResult.campaignId, saveResult.reason);
+    } else if (saveResult.kind === "conflict") {
+      redirect(
+        `${afterSaveEditUrl}?error=${encodeURIComponent("캠페인 상태가 바뀌어 발송 설정을 저장하지 않았습니다. 다시 확인해 주세요.")}`,
+      );
+    } else if (saveResult.sendResult && !saveResult.sendResult.ok) {
+      redirect(`${afterSaveEditUrl}?error=${encodeURIComponent(`발송 실패: ${saveResult.sendResult.error}`)}`);
     }
   }
 
