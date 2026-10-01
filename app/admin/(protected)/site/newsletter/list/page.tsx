@@ -2,6 +2,7 @@ import PageHeader from "@/components/admin/PageHeader";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { deleteNewsletter, deleteNewsletters, cancelCampaign, sendCampaignNow } from "../actions";
 import NewsletterSendTable from "./NewsletterSendTable";
+import { campaignOverdue } from "@/lib/newsletter/campaign-overdue";
 import { PAGE_SIZE_OPTIONS, type NewsletterSendRow, type CampaignSummary } from "../types";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -35,12 +36,13 @@ export default async function AdminNewsletterListPage({ searchParams }: Props) {
     ? await supabase
         .from("newsletter_campaigns")
         .select(
-          "id, newsletter_id, name, send_type, status, scheduled_at, recurring_time, range_start, range_end, target_all, target_tags, total_recipients, total_sent, last_error, created_at",
+          "id, newsletter_id, name, send_type, status, scheduled_at, recurring_time, range_start, range_end, target_all, target_tags, total_recipients, total_sent, last_error, created_at, last_sent_date, sending_started_at",
         )
         .in("newsletter_id", newsletterIds)
         .order("created_at", { ascending: false })
     : { data: [] as Record<string, unknown>[] };
 
+  const now = new Date();
   const campaignByNewsletterId = new Map<string, CampaignSummary>();
   for (const c of campaigns ?? []) {
     const newsletterId = c.newsletter_id as string;
@@ -59,6 +61,20 @@ export default async function AdminNewsletterListPage({ searchParams }: Props) {
       totalRecipients: (c.total_recipients as number | null) ?? 0,
       totalSent: (c.total_sent as number | null) ?? 0,
       lastError: (c.last_error as string | null) ?? null,
+      overdue: campaignOverdue(
+        {
+          status: c.status as string,
+          send_type: c.send_type as string,
+          scheduled_at: c.scheduled_at as string | null,
+          recurring_time: c.recurring_time as string | null,
+          range_start: c.range_start as string | null,
+          range_end: c.range_end as string | null,
+          last_sent_date: c.last_sent_date as string | null,
+          sending_started_at: c.sending_started_at as string | null,
+          created_at: c.created_at as string | null,
+        },
+        now,
+      ),
     });
   }
 

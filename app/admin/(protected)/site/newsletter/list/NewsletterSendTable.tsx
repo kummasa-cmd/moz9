@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CAMPAIGN_SEND_TYPE_LABEL, CAMPAIGN_STATUS_LABEL, NEWSLETTER_STATUS_LABEL } from "../labels";
+import { CAMPAIGN_OVERDUE_LABEL, kstLabel } from "@/lib/newsletter/campaign-overdue";
 import { PAGE_SIZE_OPTIONS, type CampaignSummary, type NewsletterSendRow } from "../types";
 
 function statusVariant(status: string) {
@@ -184,6 +185,14 @@ export default function NewsletterSendTable({
                       <Badge variant={campaignVariant(n.campaign.status)}>
                         {CAMPAIGN_STATUS_LABEL[n.campaign.status] ?? n.campaign.status}
                       </Badge>
+                      {n.campaign.overdue && (
+                        <p
+                          className="max-w-xs text-xs font-medium text-destructive"
+                          title={`기준 시각 ${kstLabel(n.campaign.overdue.since)} (KST)`}
+                        >
+                          {CAMPAIGN_OVERDUE_LABEL[n.campaign.overdue.kind]} · {n.campaign.overdue.minutesLate}분 경과
+                        </p>
+                      )}
                       {n.campaign.lastError && (
                         <p className="max-w-xs text-xs text-destructive break-words" title={n.campaign.lastError}>
                           {n.campaign.lastError}

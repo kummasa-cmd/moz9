@@ -1,4 +1,5 @@
 import type { ContentBlock } from "@/lib/newsletter/blocks/types";
+import type { CampaignOverdue } from "@/lib/newsletter/campaign-overdue";
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -29,6 +30,9 @@ export type CampaignSummary = {
   // Latest send error, e.g. a Broadcast preflight block. Never contains an
   // email address (see lib/newsletter/broadcast-preflight.ts).
   lastError?: string | null;
+  // Read-only lateness label (lib/newsletter/campaign-overdue.ts). Only the
+  // regular newsletter list computes it.
+  overdue?: CampaignOverdue | null;
 };
 
 export type NewsletterSendRow = {

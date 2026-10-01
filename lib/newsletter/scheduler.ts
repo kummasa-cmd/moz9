@@ -23,6 +23,30 @@ const DELIVERY_UPSERT_CHUNK_SIZE = 500;
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
+// Everything the legacy send reaches outside this module. Production uses the
+// defaults; tests pass in-memory fakes so no real DB / Resend call is made.
+export type ProcessCampaignDeps = {
+  db: AdminClient;
+  getResendClient: () => Pick<ReturnType<typeof getResendClient>, "batch">;
+  getTargetSubscribers: typeof getTargetSubscribers;
+  getTargetProspects: typeof getTargetProspects;
+  assignNewsletterIssueNumber: typeof assignNewsletterIssueNumber;
+  getAdBannersByIds: typeof getAdBannersByIds;
+  recordBoardPostNewsletterUsage: typeof recordBoardPostNewsletterUsage;
+};
+
+function resolveDeps(overrides: Partial<ProcessCampaignDeps> = {}): ProcessCampaignDeps {
+  return {
+    db: overrides.db ?? createAdminClient(),
+    getResendClient: overrides.getResendClient ?? getResendClient,
+    getTargetSubscribers: overrides.getTargetSubscribers ?? getTargetSubscribers,
+    getTargetProspects: overrides.getTargetProspects ?? getTargetProspects,
+    assignNewsletterIssueNumber: overrides.assignNewsletterIssueNumber ?? assignNewsletterIssueNumber,
+    getAdBannersByIds: overrides.getAdBannersByIds ?? getAdBannersByIds,
+    recordBoardPostNewsletterUsage: overrides.recordBoardPostNewsletterUsage ?? recordBoardPostNewsletterUsage,
+  };
+}
+
 type DeliveryRow = {
   id: string;
   subscriber_id: string | null;
@@ -93,10 +117,11 @@ async function markDeliveriesFailed(db: AdminClient, ids: string[], message: str
 
 export async function processCampaign(
   campaignId: string,
-  opts: { trigger?: ProcessCampaignTrigger } = {},
+  opts: { trigger?: ProcessCampaignTrigger; deps?: Partial<ProcessCampaignDeps> } = {},
 ): Promise<ProcessCampaignResult> {
   const trigger = opts.trigger ?? "schedule";
-  const db = createAdminClient();
+  const deps = resolveDeps(opts.deps);
+  const db = deps.db;
   const now = new Date();
 
   const { data: campaign } = await db
@@ -137,7 +162,7 @@ export async function processCampaign(
     if (delivery.path === "broadcast") {
       return await sendClaimedCampaignViaBroadcast(db, campaign, newsletter, now);
     }
-    return await sendClaimedCampaign(db, campaign, newsletter, now);
+    return await sendClaimedCampaign(deps, campaign, newsletter, now);
   } catch (err) {
     // Anything thrown after the claim (DB errors loading recipients, creating
     // delivery rows, ...) must not leave the campaign stuck in SENDING.
@@ -148,7 +173,7 @@ export async function processCampaign(
 }
 
 async function sendClaimedCampaign(
-  db: AdminClient,
+  deps: ProcessCampaignDeps,
   campaign: {
     id: string;
     send_type: string;
@@ -160,14 +185,15 @@ async function sendClaimedCampaign(
   newsletter: { id: string; slug: string; subject: string; blocks: unknown; published_at: string | null },
   now: Date,
 ): Promise<ProcessCampaignResult> {
+  const { db } = deps;
   const campaignId = campaign.id;
   const isPromo = campaign.audience === "PROSPECTS";
 
   // Subscriber and Prospect are structurally compatible for send purposes —
   // both carry { id, email, unsubscribeToken }.
   const recipients: { id: string; email: string; unsubscribeToken: string }[] = isPromo
-    ? await getTargetProspects()
-    : await getTargetSubscribers({
+    ? await deps.getTargetProspects()
+    : await deps.getTargetSubscribers({
         targetAll: campaign.target_all,
         targetTags: campaign.target_tags ?? [],
       });
@@ -200,10 +226,10 @@ async function sendClaimedCampaign(
   // first real send — see assignNewsletterIssueNumber for the "실제 발행" rule.
   // Promotional sends sit outside the numbered series entirely, so they never
   // get one.
-  const issueNumber = isPromo ? null : await assignNewsletterIssueNumber(newsletter.id);
+  const issueNumber = isPromo ? null : await deps.assignNewsletterIssueNumber(newsletter.id);
 
   const blocks = (newsletter.blocks as ContentBlock[] | null) ?? [];
-  const banners = await getAdBannersByIds(getAdBannerIds(blocks));
+  const banners = await deps.getAdBannersByIds(getAdBannerIds(blocks));
   const bodyHtml = renderBlocksToHtml(blocks, {
     brandColor: newsletterConfig.brandColor,
     banners,
@@ -233,7 +259,7 @@ async function sendClaimedCampaign(
   );
 
   const recipientById = new Map(recipients.map((r) => [r.id, r]));
-  const resend = getResendClient();
+  const resend = deps.getResendClient();
 
   // Counts only emails Resend actually accepted — not batch sizes, which
   // would also count deliveries dropped from the payload.
@@ -319,7 +345,7 @@ async function sendClaimedCampaign(
   // that gate (board_posts.newsletter_published) is reserved for the real,
   // subscriber-facing newsletter. See lib/community-auth.ts::canViewColumnPost.
   if (totalSent > 0 && !isPromo) {
-    await recordBoardPostNewsletterUsage(getSourcePostIds(blocks));
+    await deps.recordBoardPostNewsletterUsage(getSourcePostIds(blocks));
   }
 
   if (status === "FAILED") {

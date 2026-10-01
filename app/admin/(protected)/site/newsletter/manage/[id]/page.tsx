@@ -14,6 +14,11 @@ import { getColumnBoardPosts } from "@/lib/newsletter/queries";
 import { saveNewsletterCampaign } from "../actions";
 import type { ContentBlock } from "@/lib/newsletter/blocks/types";
 import { utcIsoToKstDatetimeLocal } from "@/lib/newsletter/schedule-time";
+import {
+  LOCKED_CAMPAIGN_STATUSES,
+  campaignScheduleLockReason,
+  createCampaignSaveStore,
+} from "@/lib/newsletter/campaign-save";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -52,6 +57,18 @@ export default async function AdminNewsletterManageEditPage({ params, searchPara
 
   const blocks = (newsletter.blocks as ContentBlock[] | null) ?? [];
   const campaignActive = campaign && campaign.status !== "CANCELLED";
+  // Same rule the save action enforces; here it only switches the form to
+  // read-only.
+  const campaignLockedReason = campaign
+    ? campaignScheduleLockReason({
+        status: campaign.status,
+        send_type: campaign.send_type,
+        hasDelivered:
+          LOCKED_CAMPAIGN_STATUSES.has(campaign.status) ||
+          ((campaign.status === "FAILED" || campaign.status === "CANCELLED") &&
+            (await createCampaignSaveStore(supabase).hasDelivered(campaign.id))),
+      })
+    : null;
 
   return (
     <div>
@@ -151,6 +168,7 @@ export default async function AdminNewsletterManageEditPage({ params, searchPara
           defaultRangeEnd={campaign?.range_end ?? ""}
           defaultTargetAll={campaign?.target_all ?? true}
           defaultTargetTags={(campaign?.target_tags ?? []).join(", ")}
+          lockedReason={campaignLockedReason}
         />
 
         {error && <p className="text-sm text-destructive">{error}</p>}
