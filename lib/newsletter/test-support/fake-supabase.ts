@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 // Minimal in-memory stand-in for the supabase-js query builder, covering only
 // what lib/newsletter/scheduler.ts uses: select / update / upsert / insert
 // with eq / neq / in / or("col.is.null,col.neq.x") filters, maybeSingle /
-// single, head-only counts ({ count: "exact", head: true }), and awaiting the
+// single, range() paging, head-only counts ({ count: "exact", head: true }), and awaiting the
 // builder directly. Test-only.
 
 type Row = Record<string, unknown>;
@@ -27,6 +27,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null; count?: num
   private onConflict: string[] = [];
   private mode: "many" | "maybeSingle" | "single" = "many";
   private countOnly = false;
+  private window: [number, number] | null = null;
 
   constructor(
     private readonly db: FakeSupabase,
@@ -76,6 +77,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null; count?: num
   limit(): this {
     return this;
   }
+  range(from: number, to: number): this {
+    this.window = [from, to];
+    return this;
+  }
   maybeSingle(): this {
     this.mode = "maybeSingle";
     return this;
@@ -89,7 +94,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null; count?: num
     const rows = this.db.rows(this.table);
     const matches = () => rows.filter((r) => this.filters.every((f) => f(r)));
 
-    if (this.op === "select") return matches().map((r) => ({ ...r }));
+    if (this.op === "select") {
+      const hit = matches().map((r) => ({ ...r }));
+      return this.window ? hit.slice(this.window[0], this.window[1] + 1) : hit;
+    }
 
     if (this.op === "update") {
       const hit = matches();
