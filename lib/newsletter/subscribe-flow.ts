@@ -38,9 +38,45 @@ export function mapSubscribeRpcRow(row: SubscribeRpcRow | null | undefined): Sub
 }
 
 // PostgREST: function not in the schema cache (PGRST202) / Postgres:
-// undefined function (42883) — i.e. migration 0029 isn't applied yet.
+// undefined function (42883) — migration missing, or PostgREST's schema
+// cache not yet reloaded right after one.
 export function isMissingFunctionError(error: { code?: string } | null | undefined): boolean {
   return error?.code === "PGRST202" || error?.code === "42883";
+}
+
+export type SubscribeRpcInput = {
+  email: string;
+  name?: string;
+  memberId?: string;
+  source: string;
+  tags?: string[];
+};
+
+type RpcClient = { rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { code?: string; message: string } | null }> };
+
+// Calls newsletter_subscribe. Fail-closed: when the function is missing the
+// signup fails — the old pre-0029 table path that used to run here lifted
+// every suppression (COMPLAINT / BOUNCE included) and reactivated BOUNCED
+// rows, so it must never be a fallback.
+export async function subscribeViaRpc(db: RpcClient, input: SubscribeRpcInput): Promise<SubscribeResult> {
+  const email = input.email.trim().toLowerCase();
+  if (!email) return { ok: false, error: "이메일을 입력해 주세요." };
+
+  const { data, error } = await db.rpc("newsletter_subscribe", {
+    p_email: email,
+    p_name: input.name ?? null,
+    p_member_id: input.memberId ?? null,
+    p_source: input.source,
+    p_tags: input.tags ?? [],
+  });
+
+  if (isMissingFunctionError(error)) {
+    console.error("[newsletter] newsletter_subscribe 함수를 찾을 수 없어 구독을 처리하지 않았습니다 (migration 0029/0030 확인).");
+    return { ok: false, error: "구독 처리를 잠시 할 수 없습니다. 잠시 후 다시 시도해 주세요." };
+  }
+  if (error) return { ok: false, error: error.message };
+
+  return mapSubscribeRpcRow((Array.isArray(data) ? data[0] : data) as SubscribeRpcRow | null);
 }
 
 export type SubscribeActionResult = { ok: true; alreadySubscribed: boolean } | { ok: false; error: string };

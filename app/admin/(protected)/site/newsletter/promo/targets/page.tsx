@@ -54,7 +54,7 @@ export default async function AdminNewsletterPromoTargetsPage({ searchParams }: 
       .range(offset, offset + limit - 1),
     supabase
       .from("newsletter_suppressions")
-      .select("id, email, unsubscribed_at", { count: "exact" })
+      .select("id, email, unsubscribed_at, reason", { count: "exact" })
       .order("unsubscribed_at", { ascending: false })
       .range(suppressedOffset, suppressedOffset + suppressedLimit - 1),
   ]);
@@ -77,6 +77,7 @@ export default async function AdminNewsletterPromoTargetsPage({ searchParams }: 
     id: s.id,
     email: s.email,
     unsubscribedAt: s.unsubscribed_at,
+    reason: s.reason,
   }));
 
   return (

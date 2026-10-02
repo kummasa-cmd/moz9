@@ -13,6 +13,7 @@ const MIGRATION = readFileSync(join(process.cwd(), "supabase/migrations/0029_new
 // Stage 4.5 — applied on top of 0029; every 0029 test below also runs
 // against the 0030 versions of the functions.
 const MIGRATION_0030 = readFileSync(join(process.cwd(), "supabase/migrations/0030_newsletter_provider_suppressions.sql"), "utf8");
+const MIGRATION_0031 = readFileSync(join(process.cwd(), "supabase/migrations/0031_newsletter_admin_suppression_delete.sql"), "utf8");
 
 // Just enough of the existing schema (0005 / 0024 / 0027 / 0028) for 0029.
 const PREREQUISITES = `
@@ -58,6 +59,8 @@ before(async () => {
   await db.exec(MIGRATION);
   await db.exec(MIGRATION_0030);
   await db.exec(MIGRATION_0030);
+  await db.exec(MIGRATION_0031);
+  await db.exec(MIGRATION_0031);
 });
 
 after(async () => {
@@ -653,5 +656,107 @@ describe("newsletter_admin_set_status", () => {
     assert.equal((await adminSet(id, "SUBSCRIBED")).outcome, "unchanged");
     assert.equal((await adminSet("00000000-0000-0000-0000-00000000dead", "SUBSCRIBED")).outcome, "not_found");
     await assert.rejects(adminSet(id, "SUPPRESSED"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 0031 — promo admin "수신거부 해제"
+// ---------------------------------------------------------------------------
+
+async function suppressionId(email: string): Promise<string> {
+  const { rows } = await db.query<{ id: string }>("select id from public.newsletter_suppressions where email = $1", [email]);
+  return rows[0].id;
+}
+
+async function promoDelete(ids: (string | null)[] | null) {
+  const { rows } = await db.query<{ deleted: number; blocked: number; not_found: number }>(
+    "select * from public.newsletter_admin_delete_suppressions($1::uuid[])",
+    [ids],
+  );
+  return { deleted: Number(rows[0].deleted), blocked: Number(rows[0].blocked), notFound: Number(rows[0].not_found) };
+}
+
+async function addSuppression(email: string, reason: string) {
+  await db.query("insert into public.newsletter_suppressions (email, reason) values ($1, $2)", [email, reason]);
+}
+
+describe("newsletter_admin_delete_suppressions (promo targets page)", () => {
+  for (const reason of ["BOUNCE", "COMPLAINT", "PROVIDER_SUPPRESSED"]) {
+    it(`refuses to lift ${reason} — prospect address or subscriber`, async () => {
+      const prospect = `pd-${reason.toLowerCase()}@example.com`;
+      await addSuppression(prospect, reason);
+      assert.deepEqual(await promoDelete([await suppressionId(prospect)]), { deleted: 0, blocked: 1, notFound: 0 });
+      assert.equal(await suppression(prospect), reason);
+      // ...so a sign-up stays blocked.
+      assert.equal((await subscribe(prospect)).result, "blocked");
+      assert.equal(await subscriberRow(prospect), null);
+
+      const member = `sd-${reason.toLowerCase()}@example.com`;
+      const status = reason === "BOUNCE" ? "BOUNCED" : reason === "COMPLAINT" ? "UNSUBSCRIBED" : "SUPPRESSED";
+      await seed(member, status, undefined, reason);
+      assert.equal((await promoDelete([await suppressionId(member)])).blocked, 1);
+      assert.equal(await suppression(member), reason);
+    });
+  }
+
+  it("a complained (UNSUBSCRIBED) subscriber can't be brought back to SUBSCRIBED through the promo screen", async () => {
+    await seed("comp@example.com", "UNSUBSCRIBED", undefined, "COMPLAINT");
+    await promoDelete([await suppressionId("comp@example.com")]);
+    assert.equal((await subscribe("comp@example.com")).result, "blocked");
+    assert.equal((await subscriberRow("comp@example.com"))?.status, "UNSUBSCRIBED");
+  });
+
+  it("refuses even a plain UNSUBSCRIBE entry while the subscriber is BOUNCED / SUPPRESSED", async () => {
+    await seed("b-u@example.com", "BOUNCED", undefined, "UNSUBSCRIBE");
+    await seed("s-u@example.com", "SUPPRESSED", undefined, "UNSUBSCRIBE");
+    const result = await promoDelete([await suppressionId("b-u@example.com"), await suppressionId("s-u@example.com")]);
+    assert.deepEqual(result, { deleted: 0, blocked: 2, notFound: 0 });
+  });
+
+  it("keeps lifting plain opt-outs: a pure prospect, and an UNSUBSCRIBED subscriber who may then re-subscribe", async () => {
+    await addSuppression("prospect-optout@example.com", "UNSUBSCRIBE");
+    await seed("member-optout@example.com", "UNSUBSCRIBED", undefined, "UNSUBSCRIBE");
+    const result = await promoDelete([await suppressionId("prospect-optout@example.com"), await suppressionId("member-optout@example.com")]);
+    assert.deepEqual(result, { deleted: 2, blocked: 0, notFound: 0 });
+    assert.equal(await suppression("prospect-optout@example.com"), null);
+    assert.equal(await suppression("member-optout@example.com"), null);
+    // Status untouched by the promo screen; the existing explicit re-subscribe still works.
+    assert.equal((await subscriberRow("member-optout@example.com"))?.status, "UNSUBSCRIBED");
+    assert.equal((await subscribe("member-optout@example.com")).result, "reactivated");
+  });
+
+  it("a mixed bulk selection deletes only the plain opt-outs", async () => {
+    await addSuppression("mix-u@example.com", "UNSUBSCRIBE");
+    await addSuppression("mix-b@example.com", "BOUNCE");
+    await addSuppression("mix-c@example.com", "COMPLAINT");
+    const ids = [await suppressionId("mix-u@example.com"), await suppressionId("mix-b@example.com"), await suppressionId("mix-c@example.com")];
+    assert.deepEqual(await promoDelete(ids), { deleted: 1, blocked: 2, notFound: 0 });
+    assert.equal(await suppression("mix-u@example.com"), null);
+    assert.equal(await suppression("mix-b@example.com"), "BOUNCE");
+    assert.equal(await suppression("mix-c@example.com"), "COMPLAINT");
+  });
+
+  it("a stale form: the entry was upgraded (UNSUBSCRIBE → BOUNCE) after the page loaded", async () => {
+    await seed("stale@example.com", "UNSUBSCRIBED", undefined, "UNSUBSCRIBE");
+    const id = await suppressionId("stale@example.com");
+    await optOut("stale@example.com", "BOUNCED", "BOUNCE", "2026-10-01T00:00:00Z");
+    assert.deepEqual(await promoDelete([id]), { deleted: 0, blocked: 1, notFound: 0 });
+    assert.equal(await suppression("stale@example.com"), "BOUNCE");
+  });
+
+  it("unknown / already-deleted / duplicate ids and an empty or NULL list", async () => {
+    await addSuppression("once@example.com", "UNSUBSCRIBE");
+    const id = await suppressionId("once@example.com");
+    assert.deepEqual(await promoDelete([id, id, "00000000-0000-0000-0000-00000000beef"]), { deleted: 1, blocked: 0, notFound: 2 });
+    assert.deepEqual(await promoDelete([]), { deleted: 0, blocked: 0, notFound: 0 });
+    assert.deepEqual(await promoDelete(null), { deleted: 0, blocked: 0, notFound: 0 });
+  });
+
+  it("is kept away from anon / authenticated", async () => {
+    const { rows } = await db.query<Record<string, boolean>>(`
+      select has_function_privilege('anon', 'public.newsletter_admin_delete_suppressions(uuid[])', 'execute') as anon,
+             has_function_privilege('authenticated', 'public.newsletter_admin_delete_suppressions(uuid[])', 'execute') as auth,
+             has_function_privilege('service_role', 'public.newsletter_admin_delete_suppressions(uuid[])', 'execute') as service`);
+    assert.deepEqual(rows[0], { anon: false, auth: false, service: true });
   });
 });

@@ -48,3 +48,10 @@ export const BANNER_POSITION_LABEL: Record<string, string> = {
   BOTTOM: "하단",
   SIDEBAR: "사이드바",
 };
+
+export const SUPPRESSION_REASON_LABEL: Record<string, string> = {
+  UNSUBSCRIBE: "수신거부",
+  PROVIDER_SUPPRESSED: "발송 차단(Resend)",
+  BOUNCE: "반송",
+  COMPLAINT: "스팸 신고",
+};

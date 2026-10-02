@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { ContentBlock } from "./blocks/types";
 import type { AdBanner, Newsletter, NewsletterTemplate, Prospect, Subscriber, SubscriberSource } from "./types";
 import { fetchAllRows } from "./paginate";
-import { isMissingFunctionError, mapSubscribeRpcRow, type SubscribeResult, type SubscribeRpcRow } from "./subscribe-flow";
+import { subscribeViaRpc, type SubscribeResult } from "./subscribe-flow";
 
 const NEWSLETTER_COLUMNS =
   "id, title, slug, subject, preheader, thumbnail_url, status, newsletter_type, blocks, view_count, like_count, dislike_count, issue_number, published_at, created_at";
@@ -195,102 +195,12 @@ export type SubscribeInput = {
 
 export type { SubscribeResult };
 
-// (Re)subscribe through the SQL function newsletter_subscribe (0029), which
-// checks the suppression reason and changes the subscriber row and the
-// suppression list in one locked transaction:
-//   UNSUBSCRIBE suppression        → lifted, row back to SUBSCRIBED
-//   COMPLAINT / BOUNCE / PROVIDER_SUPPRESSED, or BOUNCED / SUPPRESSED
-//                                  → blocked, nothing changes (0030)
+// (Re)subscribe through the SQL function newsletter_subscribe — see
+// subscribe-flow.ts::subscribeViaRpc for the rules. There is no table-level
+// fallback: a missing function fails the signup instead of lifting
+// suppressions it can't check.
 export async function subscribe(input: SubscribeInput): Promise<SubscribeResult> {
-  const email = input.email.trim().toLowerCase();
-  if (!email) return { ok: false, error: "이메일을 입력해 주세요." };
-
-  const db = createAdminClient();
-  const { data, error } = await db.rpc("newsletter_subscribe", {
-    p_email: email,
-    p_name: input.name ?? null,
-    p_member_id: input.memberId ?? null,
-    p_source: input.source,
-    p_tags: input.tags ?? [],
-  });
-
-  // Until 0029 is applied the function doesn't exist; keep signups working
-  // on the old path (no COMPLAINT / BOUNCE suppressions can exist yet then).
-  if (isMissingFunctionError(error)) return subscribeWithoutSuppressionReasons(input);
-  if (error) return { ok: false, error: error.message };
-
-  return mapSubscribeRpcRow((Array.isArray(data) ? data[0] : data) as SubscribeRpcRow | null);
-}
-
-// Pre-0029 subscribe path. Only reached while newsletter_subscribe() is
-// missing; remove once 0029 is applied everywhere.
-async function subscribeWithoutSuppressionReasons(input: SubscribeInput): Promise<SubscribeResult> {
-  const email = input.email.trim().toLowerCase();
-  const db = createAdminClient();
-
-  const { data: existing, error: lookupError } = await db
-    .from("newsletter_subscribers")
-    .select("id, status, resend_synced_at, resend_sync_error")
-    .eq("email", email)
-    .maybeSingle();
-
-  if (lookupError) return { ok: false, error: lookupError.message };
-
-  let alreadySubscribed = false;
-  let subscriberId: string | null = (existing?.id as string | undefined) ?? null;
-  // A status change always needs a Resend sync; an already-subscribed retry
-  // only when the earlier sync never landed (so resubmits can't spam Resend).
-  let needsContactSync = true;
-
-  if (existing?.status === "SUBSCRIBED") {
-    alreadySubscribed = true;
-    needsContactSync = !existing.resend_synced_at || !!existing.resend_sync_error;
-  } else if (existing) {
-    const { error } = await db
-      .from("newsletter_subscribers")
-      .update({
-        status: "SUBSCRIBED",
-        subscribed_at: new Date().toISOString(),
-        unsubscribed_at: null,
-        name: input.name || undefined,
-        member_id: input.memberId || undefined,
-        // Marks the Resend Contact stale until the follow-up sync succeeds.
-        resend_synced_at: null,
-      })
-      .eq("id", existing.id);
-
-    if (error) return { ok: false, error: error.message };
-  } else {
-    const { data: inserted, error } = await db
-      .from("newsletter_subscribers")
-      .insert({
-        email,
-        name: input.name || null,
-        member_id: input.memberId || null,
-        source: input.source,
-        tags: input.tags ?? [],
-      })
-      .select("id")
-      .single();
-
-    // 23505: a concurrent submit inserted the same email first — that
-    // request owns the Resend sync.
-    if (error?.code === "23505") {
-      alreadySubscribed = true;
-      needsContactSync = false;
-    } else if (error) return { ok: false, error: error.message };
-    else subscriberId = inserted.id as string;
-  }
-
-  // An explicit (re)subscribe is fresh consent, so it lifts any earlier
-  // do-not-contact entry — otherwise getTargetSubscribers keeps filtering the
-  // address out and a returning subscriber silently never gets mail. Also
-  // runs on the already-subscribed path, so a retry heals a previous attempt
-  // whose suppression delete failed.
-  const { error: suppressionError } = await removeFromSuppressionList(email);
-  if (suppressionError) return { ok: false, error: suppressionError.message };
-
-  return { ok: true, alreadySubscribed, subscriberId, needsContactSync: needsContactSync && !!subscriberId };
+  return subscribeViaRpc(createAdminClient(), input);
 }
 
 // Global do-not-contact list, shared by both the regular and promotional
@@ -301,11 +211,6 @@ export async function addToSuppressionList(email: string): Promise<void> {
   await db
     .from("newsletter_suppressions")
     .upsert({ email }, { onConflict: "email", ignoreDuplicates: true });
-}
-
-export async function removeFromSuppressionList(email: string) {
-  const db = createAdminClient();
-  return db.from("newsletter_suppressions").delete().eq("email", email);
 }
 
 // Paged — an unpaged select stops at 1,000 rows, which would let every

@@ -4,6 +4,7 @@ import {
   isMissingFunctionError,
   mapSubscribeRpcRow,
   runSubscribeAction,
+  subscribeViaRpc,
   type SubscribeResult,
 } from "./subscribe-flow";
 
@@ -115,5 +116,52 @@ describe("isMissingFunctionError", () => {
     assert.equal(isMissingFunctionError({ code: "42883" }), true);
     assert.equal(isMissingFunctionError({ code: "23505" }), false);
     assert.equal(isMissingFunctionError(null), false);
+  });
+});
+
+describe("subscribeViaRpc — fail-closed, no table fallback", () => {
+  function rpcDb(reply: { data: unknown; error: { code?: string; message: string } | null }) {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const db = {
+      rpc: async (fn: string, args: Record<string, unknown>) => {
+        calls.push({ fn, args });
+        return reply;
+      },
+      // The old pre-0029 path read / updated newsletter_subscribers and
+      // deleted newsletter_suppressions directly. It must never run again.
+      from: () => {
+        throw new Error("no table access on the subscribe path");
+      },
+    };
+    return { db, calls };
+  }
+
+  it("calls newsletter_subscribe with the normalized email", async () => {
+    const { db, calls } = rpcDb({ data: [{ result: "created", subscriber_id: "s1", needs_contact_sync: true }], error: null });
+    const result = await subscribeViaRpc(db, { email: " Kim@Example.com ", source: "WEBSITE" });
+    assert.deepEqual(result, { ok: true, alreadySubscribed: false, subscriberId: "s1", needsContactSync: true });
+    assert.equal(calls[0].fn, "newsletter_subscribe");
+    assert.equal(calls[0].args.p_email, "kim@example.com");
+  });
+
+  for (const code of ["PGRST202", "42883"]) {
+    it(`a missing function (${code}, e.g. a stale schema cache mid-migration) fails the signup instead of lifting suppressions`, async () => {
+      const { db, calls } = rpcDb({ data: null, error: { code, message: "Could not find the function" } });
+      const original = console.error;
+      console.error = () => {};
+      try {
+        const result = await subscribeViaRpc(db, { email: "kim@example.com", source: "WEBSITE" });
+        assert.equal(result.ok, false);
+      } finally {
+        console.error = original;
+      }
+      assert.equal(calls.length, 1);
+    });
+  }
+
+  it("a blocked address stays blocked", async () => {
+    const { db } = rpcDb({ data: [{ result: "blocked", subscriber_id: null, needs_contact_sync: false }], error: null });
+    const result = await subscribeViaRpc(db, { email: "kim@example.com", source: "WEBSITE" });
+    assert.equal(result.ok && result.blocked, true);
   });
 });

@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PAGE_SIZE_OPTIONS, type SuppressionRow } from "../../types";
+import { SUPPRESSION_REASON_LABEL } from "../../labels";
 
 type Props = {
   suppressions: SuppressionRow[];
@@ -109,6 +110,7 @@ export default function SuppressionsTable({
               </TableHead>
               <TableHead>이메일</TableHead>
               <TableHead>수신거부일</TableHead>
+              <TableHead>사유</TableHead>
               <TableHead className="text-right">관리</TableHead>
             </TableRow>
           </TableHeader>
@@ -126,36 +128,41 @@ export default function SuppressionsTable({
                 <TableCell className="text-muted-foreground">
                   {new Date(s.unsubscribedAt).toLocaleDateString("ko-KR")}
                 </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {SUPPRESSION_REASON_LABEL[s.reason] ?? s.reason}
+                </TableCell>
                 <TableCell className="text-right">
-                  <form
-                    action={deleteSuppressionAction}
-                    onSubmit={(e) => {
-                      if (
-                        !window.confirm(
-                          "수신거부를 해제하면 해당 이메일로 뉴스레터가 다시 발송될 수 있습니다. 계속할까요?",
-                        )
-                      ) {
-                        e.preventDefault();
-                      }
-                    }}
-                  >
-                    <input type="hidden" name="id" value={s.id} />
-                    <button
-                      type="submit"
-                      className="text-muted-foreground hover:text-destructive transition-colors"
-                      aria-label="수신거부 해제"
-                      title="수신거부 해제"
+                  {s.reason === "UNSUBSCRIBE" && (
+                    <form
+                      action={deleteSuppressionAction}
+                      onSubmit={(e) => {
+                        if (
+                          !window.confirm(
+                            "수신거부를 해제하면 해당 이메일로 뉴스레터가 다시 발송될 수 있습니다. 계속할까요?",
+                          )
+                        ) {
+                          e.preventDefault();
+                        }
+                      }}
                     >
-                      <Trash2 size={15} />
-                    </button>
-                  </form>
+                      <input type="hidden" name="id" value={s.id} />
+                      <button
+                        type="submit"
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                        aria-label="수신거부 해제"
+                        title="수신거부 해제"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </form>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
 
             {suppressions.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground py-10">
+                <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
                   수신거부한 이메일이 없습니다.
                 </TableCell>
               </TableRow>

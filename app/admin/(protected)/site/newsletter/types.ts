@@ -73,6 +73,9 @@ export type SuppressionRow = {
   id: string;
   email: string;
   unsubscribedAt: string;
+  // UNSUBSCRIBE | PROVIDER_SUPPRESSED | BOUNCE | COMPLAINT — only UNSUBSCRIBE
+  // can be lifted from the promo screen (0031).
+  reason: string;
 };
 
 export type BannerRow = {
