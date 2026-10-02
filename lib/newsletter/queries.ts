@@ -199,7 +199,8 @@ export type { SubscribeResult };
 // checks the suppression reason and changes the subscriber row and the
 // suppression list in one locked transaction:
 //   UNSUBSCRIBE suppression        → lifted, row back to SUBSCRIBED
-//   COMPLAINT / BOUNCE, or BOUNCED → blocked, nothing changes
+//   COMPLAINT / BOUNCE / PROVIDER_SUPPRESSED, or BOUNCED / SUPPRESSED
+//                                  → blocked, nothing changes (0030)
 export async function subscribe(input: SubscribeInput): Promise<SubscribeResult> {
   const email = input.email.trim().toLowerCase();
   if (!email) return { ok: false, error: "이메일을 입력해 주세요." };

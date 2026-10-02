@@ -31,7 +31,7 @@ import {
   describePreflightIssues,
   runBroadcastPreflight,
   type PreflightResult,
-  type SegmentContactsClient,
+  type PreflightClient,
 } from "./broadcast-preflight";
 import type { ProcessCampaignResult } from "./scheduler";
 
@@ -287,8 +287,8 @@ export type BroadcastNewsletter = {
 };
 
 export type BroadcastCampaignDeps = {
-  createClient: () => ResendBroadcastsClient & SegmentContactsClient;
-  runPreflight: (db: AdminClient, client: SegmentContactsClient, segmentId: string) => Promise<PreflightResult>;
+  createClient: () => ResendBroadcastsClient & PreflightClient;
+  runPreflight: (db: AdminClient, client: PreflightClient, segmentId: string) => Promise<PreflightResult>;
   loadTiming: (db: AdminClient, campaignId: string) => Promise<CampaignTiming>;
   getRecipientCount: () => Promise<number>;
   assignIssueNumber: (newsletterId: string) => Promise<number | null>;

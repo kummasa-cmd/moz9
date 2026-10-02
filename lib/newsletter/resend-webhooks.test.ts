@@ -130,7 +130,15 @@ describe("planResendWebhookEvent", () => {
 
   it("ignores email events without a broadcast id (legacy newsletter or service mail)", () => {
     const plan = planResendWebhookEvent(event({ type: "email.complained", created_at: "", data: baseData }));
-    assert.deepEqual(plan, { eventType: "email.complained", eventCreatedAt: "", metadata: {}, kind: "ignore", reason: "not_newsletter" });
+    // The Resend email id is kept for diagnosis (Stage 4.5) — never the address.
+    assert.deepEqual(plan, {
+      eventType: "email.complained",
+      eventCreatedAt: "",
+      metadata: {},
+      kind: "ignore",
+      reason: "not_newsletter",
+      emailId: "e_1",
+    });
   });
 
   it("plans a permanent bounce as BOUNCED and records the bounce type", () => {
@@ -208,5 +216,103 @@ describe("describeWebhookPlan", () => {
     const text = describeWebhookPlan(plan);
     assert.equal(text, "email.complained broadcast_email broadcast=b_1 subscriber→UNSUBSCRIBED(complaint)");
     assert.equal(/@/.test(text), false);
+  });
+});
+
+describe("planResendWebhookEvent — Resend account suppression (Stage 4.5)", () => {
+  const legacy = { email_id: "e_9", created_at: "", from: "news@news.moz9.kr", subject: "s", to: ["Kim@Example.com"] };
+
+  it("a legacy email.suppressed becomes a provider check, keeping email_id and suppressed.type", () => {
+    const plan = planResendWebhookEvent(
+      event({
+        type: "email.suppressed",
+        created_at: "",
+        data: { ...legacy, suppressed: { type: "OnAccountSuppressionList", message: "suppressed kim@example.com" } },
+      }),
+    );
+    assert.deepEqual(plan, {
+      eventType: "email.suppressed",
+      eventCreatedAt: "",
+      metadata: { suppressed_type: "OnAccountSuppressionList" },
+      kind: "provider_suppression",
+      emailId: "e_9",
+      check: { trigger: "email.suppressed", email: "kim@example.com", suppressionId: null, origin: null, sourceEmailId: null },
+    });
+  });
+
+  it("a Broadcast email.suppressed links for stats and carries the provider check", () => {
+    const plan = planResendWebhookEvent(
+      event({ type: "email.suppressed", created_at: "", data: { ...legacy, broadcast_id: "b_1", suppressed: { type: "OnAccountSuppressionList", message: "" } } }),
+    );
+    assert.equal(plan.kind, "broadcast_email");
+    if (plan.kind === "broadcast_email") {
+      assert.equal(plan.change, null);
+      assert.equal(plan.providerCheck?.email, "kim@example.com");
+    }
+  });
+
+  it("a legacy bounce is still ignored but keeps email_id and the bounce type", () => {
+    const plan = planResendWebhookEvent(
+      event({ type: "email.bounced", created_at: "", data: { ...legacy, bounce: { type: "Permanent", subType: "General", message: "m" } } }),
+    );
+    assert.equal(plan.kind, "ignore");
+    assert.deepEqual(plan.metadata, { bounce_type: "Permanent", bounce_sub_type: "General" });
+    assert.equal(plan.kind === "ignore" && plan.emailId, "e_9");
+  });
+
+  it("a Transient bounce never plans a status change", () => {
+    const plan = planResendWebhookEvent(
+      event({ type: "email.bounced", created_at: "", data: { ...legacy, broadcast_id: "b_1", bounce: { type: "Transient", subType: "General", message: "" } } }),
+    );
+    assert.equal(plan.kind === "broadcast_email" && plan.change, null);
+  });
+
+  it("drops a malformed bounce / suppressed type instead of storing it", () => {
+    const plan = planResendWebhookEvent(
+      event({ type: "email.bounced", created_at: "", data: { ...legacy, broadcast_id: "b_1", bounce: { type: "Permanent for kim@example.com", subType: 3, message: "" } } }),
+    );
+    assert.deepEqual(plan.metadata, {});
+    assert.equal(plan.kind === "broadcast_email" && plan.change, null);
+  });
+
+  it("suppression.added → provider check from the payload; suppression.removed → recorded only", () => {
+    const data = { id: "sup_1", email: "Kim@Example.com", origin: "bounce", source_id: "e_7", created_at: "" };
+    const added = planResendWebhookEvent(event({ type: "suppression.added", created_at: "", data } as never));
+    assert.deepEqual(added, {
+      eventType: "suppression.added",
+      eventCreatedAt: "",
+      metadata: { suppression_id: "sup_1", origin: "bounce", source_email_id: "e_7" },
+      kind: "provider_suppression",
+      emailId: null,
+      check: { trigger: "suppression.added", email: "kim@example.com", suppressionId: "sup_1", origin: "bounce", sourceEmailId: "e_7" },
+    });
+
+    const removed = planResendWebhookEvent(event({ type: "suppression.removed", created_at: "", data } as never));
+    assert.deepEqual(removed, {
+      eventType: "suppression.removed",
+      eventCreatedAt: "",
+      metadata: { suppression_id: "sup_1", origin: "bounce", source_email_id: "e_7" },
+      kind: "ignore",
+      reason: "suppression_removed",
+    });
+  });
+
+  it("suppression.added without an address is missing_data", () => {
+    const plan = planResendWebhookEvent(event({ type: "suppression.added", created_at: "", data: { id: "sup_1", origin: "manual" } } as never));
+    assert.equal(plan.kind === "ignore" && plan.reason, "missing_data");
+  });
+
+  it("no plan ever carries an address in metadata, and the log summary has none either", () => {
+    const events = [
+      { type: "email.suppressed", created_at: "", data: { ...legacy, suppressed: { type: "OnAccountSuppressionList", message: "kim@example.com" } } },
+      { type: "email.bounced", created_at: "", data: { ...legacy, bounce: { type: "Permanent", subType: "General", message: "kim@example.com" } } },
+      { type: "suppression.added", created_at: "", data: { id: "sup_1", email: "kim@example.com", origin: "complaint", source_id: "e_1" } },
+      { type: "suppression.removed", created_at: "", data: { id: "sup_1", email: "kim@example.com", origin: "complaint", source_id: "e_1" } },
+    ];
+    for (const e of events) {
+      const plan = planResendWebhookEvent(event(e as never));
+      assert.equal(JSON.stringify(plan.metadata).includes("@"), false, e.type);
+      assert.equal(describeWebhookPlan(plan).includes("@"), false, e.type);
+    }
   });
 });

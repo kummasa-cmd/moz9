@@ -4,11 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { addToSuppressionList, removeFromSuppressionList } from "@/lib/newsletter/queries";
+import { adminSetSubscriberStatus, isAdminStatus } from "@/lib/newsletter/admin-status";
 import { syncSubscriberContact, unsubscribeDeletedContacts } from "@/lib/newsletter/contact-sync";
-import type { SubscriberStatus } from "@/lib/newsletter/types";
-
-const SUBSCRIBER_STATUSES: SubscriberStatus[] = ["SUBSCRIBED", "UNSUBSCRIBED", "BOUNCED"];
 
 export async function addSubscriber(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -83,48 +80,25 @@ export async function bulkAddSubscribers(formData: FormData) {
 
 // Mirrors the website's (re)subscribe / unsubscribe behavior so an admin
 // status change and a subscriber's own action end in the same state:
-//   SUBSCRIBED   → lift the do-not-contact entry, Resend Contact unsubscribed=false
-//   UNSUBSCRIBED → add the do-not-contact entry,  Resend Contact unsubscribed=true
-// Supabase is written first; the Resend sync runs afterwards and a failure
-// there is only recorded on the row (resend_sync_error) for retry.
+//   SUBSCRIBED   → lift an UNSUBSCRIBE entry, Resend Contact unsubscribed=false
+//   UNSUBSCRIBED → add the do-not-contact entry, Resend Contact unsubscribed=true
+// Bounced / complained / Resend-suppressed subscribers are refused (see
+// lib/newsletter/admin-status.ts). Supabase is written first (one SQL
+// function call); the Resend sync runs afterwards and a failure there is
+// only recorded on the row (resend_sync_error) for retry.
 export async function setSubscriberStatus(formData: FormData) {
   const id = String(formData.get("id") ?? "");
-  const status = String(formData.get("status") ?? "") as SubscriberStatus;
-  if (!id || !SUBSCRIBER_STATUSES.includes(status)) return;
+  const status = String(formData.get("status") ?? "");
+  if (!id || !isAdminStatus(status)) return;
 
-  const supabase = createAdminClient();
-  const patch: Record<string, unknown> = {
-    status,
-    // Marks the Resend Contact stale until the follow-up sync succeeds.
-    resend_synced_at: null,
-  };
-  if (status === "UNSUBSCRIBED") patch.unsubscribed_at = new Date().toISOString();
-  if (status === "SUBSCRIBED") patch.unsubscribed_at = null;
-
-  const { data: updated, error } = await supabase
-    .from("newsletter_subscribers")
-    .update(patch)
-    .eq("id", id)
-    .select("email")
-    .maybeSingle();
-
-  if (error || !updated) {
-    if (error) console.error("[newsletter] 구독자 상태 변경 실패:", id, error.message);
+  const result = await adminSetSubscriberStatus(createAdminClient(), id, status);
+  if (!result.ok) {
+    console.error("[newsletter] 구독자 상태 변경 거부/실패:", id, result.outcome);
     revalidatePath("/admin/site/newsletter/subscribers");
-    return;
+    redirect(`/admin/site/newsletter/subscribers?error=${encodeURIComponent(result.message)}`);
   }
 
-  const email = updated.email as string;
-  if (status === "SUBSCRIBED") {
-    const { error: suppressionError } = await removeFromSuppressionList(email);
-    if (suppressionError) {
-      console.error("[newsletter] 수신거부 목록 제거 실패:", email, suppressionError.message);
-    }
-  } else if (status === "UNSUBSCRIBED") {
-    await addToSuppressionList(email);
-  }
-
-  after(() => syncSubscriberContact(id));
+  if (result.outcome === "updated") after(() => syncSubscriberContact(id));
   revalidatePath("/admin/site/newsletter/subscribers");
 }
 

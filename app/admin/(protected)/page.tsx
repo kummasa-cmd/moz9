@@ -23,7 +23,7 @@ function statusVariant(status: string) {
 
 function subscriberStatusVariant(status: string) {
   if (status === "SUBSCRIBED") return "default" as const;
-  if (status === "BOUNCED") return "destructive" as const;
+  if (status === "BOUNCED" || status === "SUPPRESSED") return "destructive" as const;
   return "secondary" as const;
 }
 

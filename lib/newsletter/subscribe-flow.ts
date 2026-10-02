@@ -2,15 +2,16 @@
 // Supabase / Next.js imports so the re-subscribe rules are unit-tested.
 //
 // The rules themselves live in the SQL function newsletter_subscribe
-// (0029_newsletter_resend_webhook_events.sql):
+// (0029, tightened in 0030_newsletter_provider_suppressions.sql):
 //   UNSUBSCRIBE suppression        → lifted by an explicit site (re)subscribe
-//   COMPLAINT / BOUNCE suppression,
-//   or status BOUNCED              → 'blocked': nothing changes
+//   COMPLAINT / BOUNCE / PROVIDER_SUPPRESSED suppression,
+//   or status BOUNCED / SUPPRESSED → 'blocked': nothing changes
 
 export type SubscribeResult =
   // subscriberId / needsContactSync: lets the caller mirror the result to
   // Resend Contacts afterwards (lib/newsletter/contact-sync.ts).
-  // blocked: the address is suppressed for a complaint / hard bounce. The
+  // blocked: the address is suppressed for a complaint / hard bounce / Resend
+  // account suppression. The
   // caller must not sync (the Contact stays unsubscribed) and must not tell
   // the visitor why.
   | { ok: true; alreadySubscribed: boolean; subscriberId: string | null; needsContactSync: boolean; blocked?: boolean }

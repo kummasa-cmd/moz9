@@ -3,6 +3,7 @@ import type { Resend } from "resend";
 import { fetchAllRows } from "./paginate";
 import { isSuppressionNewerThanSync } from "./resend-contacts";
 import { redactSecrets } from "./resend-broadcasts";
+import { listAccountSuppressions, type SuppressionListClient } from "./resend-suppressions";
 
 // Broadcast preflight (B1, third line of defence).
 //
@@ -15,6 +16,13 @@ import { redactSecrets } from "./resend-broadcasts";
 // never looks at Supabase. So this compares the actual segment with Supabase
 // and blocks the send (fail-closed) whenever someone who must not receive it
 // could: we'd rather send nothing than mail a person who opted out.
+//
+// Stage 4.5: it also reads the Resend *account suppression* list. Resend
+// skips those addresses whatever the segment says, so a subscribed Contact
+// on it means Supabase / the segment no longer describe who receives the
+// issue (counts, stats, and an address we keep treating as a reader). That
+// blocks too, as does failing to read the list; the contact-sync
+// reconciliation clears it and the 2-hour preflight retry then sends.
 //
 // Kept free of Next.js imports; the evaluation is pure and unit-tested.
 
@@ -31,10 +39,15 @@ export type PreflightSuppression = { email: string; unsubscribed_at: string };
 
 export type SegmentContact = { id: string; email: string; unsubscribed: boolean };
 
+export type PreflightAccountSuppression = { email: string };
+
 export type PreflightIssueCode =
   // blocking — someone who opted out could receive the Broadcast
   | "SEGMENT_READ_FAILED"
+  | "SUPPRESSION_READ_FAILED"
   | "RESEND_SUBSCRIBED_NOT_ELIGIBLE"
+  // blocking — a subscribed Contact is on the Resend account suppression list
+  | "RESEND_SUPPRESSED_BUT_SUBSCRIBED"
   | "RESEND_SUBSCRIBED_UNKNOWN"
   | "NOT_ELIGIBLE_UNSYNCED"
   // warnings — an eligible subscriber would miss this issue
@@ -88,6 +101,7 @@ export function evaluateBroadcastPreflight(input: {
   subscribers: PreflightSubscriber[];
   suppressions: PreflightSuppression[];
   segmentContacts: SegmentContact[];
+  accountSuppressions: PreflightAccountSuppression[];
 }): PreflightResult {
   const suppressedAt = new Map(input.suppressions.map((s) => [normalize(s.email), s.unsubscribed_at]));
   const byEmail = new Map(input.subscribers.map((s) => [normalize(s.email), s]));
@@ -96,13 +110,18 @@ export function evaluateBroadcastPreflight(input: {
   const segment = new Map(input.segmentContacts.map((c) => [normalize(c.email), c]));
   const segmentSubscribed = input.segmentContacts.filter((c) => !c.unsubscribed);
 
+  const accountSuppressed = new Set(input.accountSuppressions.map((s) => normalize(s.email)));
+
   // Who the Broadcast would actually reach, checked one by one.
   const notEligibleButSubscribed: string[] = [];
   const unknownButSubscribed: string[] = [];
+  const suppressedButSubscribed: string[] = [];
   for (const contact of segmentSubscribed) {
     const row = byEmail.get(normalize(contact.email));
     if (!row) unknownButSubscribed.push(contact.id);
     else if (!isEligible(row)) notEligibleButSubscribed.push(row.id);
+    // Subscriber id when we have one, else the Contact id — never the address.
+    if (accountSuppressed.has(normalize(contact.email))) suppressedButSubscribed.push(row?.id ?? contact.id);
   }
 
   // Supabase-side: opted-out rows whose opt-out may not have reached Resend.
@@ -133,6 +152,7 @@ export function evaluateBroadcastPreflight(input: {
   const blocking: PreflightIssue[] = [];
   if (notEligibleButSubscribed.length) blocking.push(issue("RESEND_SUBSCRIBED_NOT_ELIGIBLE", notEligibleButSubscribed));
   if (unknownButSubscribed.length) blocking.push(issue("RESEND_SUBSCRIBED_UNKNOWN", unknownButSubscribed));
+  if (suppressedButSubscribed.length) blocking.push(issue("RESEND_SUPPRESSED_BUT_SUBSCRIBED", suppressedButSubscribed));
   if (notEligibleUnsynced.length) blocking.push(issue("NOT_ELIGIBLE_UNSYNCED", notEligibleUnsynced));
   if (isEligibleGapTooLarge(gap, eligible)) {
     blocking.push(issue("ELIGIBLE_GAP_TOO_LARGE", [...new Set([...eligibleUnsynced, ...eligibleNotInSegment])]));
@@ -145,20 +165,26 @@ export function evaluateBroadcastPreflight(input: {
   return { ok: blocking.length === 0, blocking, warnings, eligible, segmentSubscribed: segmentSubscribed.length };
 }
 
-export function segmentReadFailed(): PreflightResult {
+function readFailed(codes: ("SEGMENT_READ_FAILED" | "SUPPRESSION_READ_FAILED")[]): PreflightResult {
   return {
     ok: false,
-    blocking: [{ code: "SEGMENT_READ_FAILED", count: 0, sampleIds: [] }],
+    blocking: codes.map((code) => ({ code, count: 0, sampleIds: [] })),
     warnings: [],
     eligible: 0,
     segmentSubscribed: 0,
   };
 }
 
+export function segmentReadFailed(): PreflightResult {
+  return readFailed(["SEGMENT_READ_FAILED"]);
+}
+
 const LABELS: Record<PreflightIssueCode, string> = {
   SEGMENT_READ_FAILED: "Resend Segment 또는 구독자 목록 조회 실패",
+  SUPPRESSION_READ_FAILED: "Resend 계정 suppression 목록 조회 실패",
   RESEND_SUBSCRIBED_NOT_ELIGIBLE: "Resend 구독인데 Supabase 수신 비대상",
   RESEND_SUBSCRIBED_UNKNOWN: "Resend 구독인데 Supabase에 없는 Contact",
+  RESEND_SUPPRESSED_BUT_SUBSCRIBED: "Segment 구독인데 Resend 계정 suppression 대상",
   NOT_ELIGIBLE_UNSYNCED: "수신 비대상인데 Resend 미동기화",
   ELIGIBLE_UNSYNCED: "수신 대상인데 Resend 미동기화",
   ELIGIBLE_NOT_IN_SEGMENT: "수신 대상인데 Segment에서 구독 아님",
@@ -170,7 +196,8 @@ const LABELS: Record<PreflightIssueCode, string> = {
 export function describePreflightIssues(issues: PreflightIssue[]): string {
   return issues
     .map((i) => {
-      const count = i.code === "SEGMENT_READ_FAILED" ? "" : ` ${i.count}건`;
+      const noCount = i.code === "SEGMENT_READ_FAILED" || i.code === "SUPPRESSION_READ_FAILED";
+      const count = noCount ? "" : ` ${i.count}건`;
       const ids = i.sampleIds.length ? ` (${i.sampleIds.map((id) => id.slice(0, 8)).join(", ")}${i.count > i.sampleIds.length ? ", …" : ""})` : "";
       return `${LABELS[i.code]}${count}${ids}`;
     })
@@ -182,6 +209,8 @@ export function describePreflightIssues(issues: PreflightIssue[]): string {
 // ---------------------------------------------------------------------------
 
 export type SegmentContactsClient = { contacts: { list: Resend["contacts"]["list"] } };
+// What the preflight reads from Resend: the segment and the account suppression list.
+export type PreflightClient = SegmentContactsClient & SuppressionListClient;
 
 const SEGMENT_PAGE_SIZE = 100;
 const MAX_SEGMENT_PAGES = 1000;
@@ -228,23 +257,35 @@ export async function loadPreflightDbInputs(
   return { subscribers, suppressions };
 }
 
+function logReadFailure(what: string, err: unknown) {
+  console.error(
+    `[newsletter] Broadcast preflight ${what} 조회 실패:`,
+    redactSecrets(err instanceof Error ? err.message : String(err)),
+  );
+}
+
 // Runs the whole check. Never throws: any read failure is a blocking result.
 export async function runBroadcastPreflight(
   db: SupabaseClient,
-  client: SegmentContactsClient,
+  client: PreflightClient,
   segmentId: string,
 ): Promise<PreflightResult> {
-  try {
-    const [dbInputs, segmentContacts] = await Promise.all([
-      loadPreflightDbInputs(db),
-      listSegmentContacts(client, segmentId),
-    ]);
-    return evaluateBroadcastPreflight({ ...dbInputs, segmentContacts });
-  } catch (err) {
-    console.error(
-      "[newsletter] Broadcast preflight 입력 조회 실패:",
-      redactSecrets(err instanceof Error ? err.message : String(err)),
-    );
-    return segmentReadFailed();
+  const [base, suppressions] = await Promise.allSettled([
+    Promise.all([loadPreflightDbInputs(db), listSegmentContacts(client, segmentId)]),
+    listAccountSuppressions(client),
+  ]);
+
+  const failed: ("SEGMENT_READ_FAILED" | "SUPPRESSION_READ_FAILED")[] = [];
+  if (base.status === "rejected") {
+    logReadFailure("입력", base.reason);
+    failed.push("SEGMENT_READ_FAILED");
   }
+  if (suppressions.status === "rejected") {
+    logReadFailure("Resend suppression 목록", suppressions.reason);
+    failed.push("SUPPRESSION_READ_FAILED");
+  }
+  if (base.status === "rejected" || suppressions.status === "rejected") return readFailed(failed);
+
+  const [dbInputs, segmentContacts] = base.value;
+  return evaluateBroadcastPreflight({ ...dbInputs, segmentContacts, accountSuppressions: suppressions.value });
 }

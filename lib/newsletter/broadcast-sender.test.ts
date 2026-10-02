@@ -7,7 +7,7 @@ import {
   type BroadcastRunStore,
   type ReserveInput,
 } from "./broadcast-sender";
-import type { PreflightResult } from "./broadcast-preflight";
+import { runBroadcastPreflight, type PreflightResult } from "./broadcast-preflight";
 import { RESEND_UNSUBSCRIBE_PLACEHOLDER, type ResendBroadcastsClient } from "./resend-broadcasts";
 import { buildEmailTemplate, personalizeEmail, toBroadcastHtml } from "./email";
 
@@ -410,5 +410,79 @@ describe("sendClaimedCampaignViaBroadcast — preflight", () => {
     const { db } = campaignDb();
     await withSegmentEnv(() => sendClaimedCampaignViaBroadcast(db, campaign, newsletter, o.now, o.deps));
     assert.deepEqual(o.order, ["preflight"]);
+  });
+});
+
+describe("sendClaimedCampaignViaBroadcast — account suppression preflight (Stage 4.5)", () => {
+  // The real preflight against fake Supabase / Resend reads: segment and DB
+  // agree, but one subscribed Contact is on the Resend suppression list.
+  function realPreflight(order: string[], suppressionList: "fail" | { id: string; email: string }[]) {
+    const subscribers = [1, 2].map((n) => ({
+      id: `sub-${n}`,
+      email: `user${n}@example.com`,
+      status: "SUBSCRIBED",
+      resend_contact_id: `c-${n}`,
+      resend_synced_at: "2026-09-30T00:00:00Z",
+      resend_sync_error: null,
+    }));
+    const preflightDb = {
+      from: (table: string) => ({
+        select: () => ({
+          order: () => ({
+            range: async (from: number) => ({ data: from > 0 ? [] : table === "newsletter_subscribers" ? subscribers : [], error: null }),
+          }),
+        }),
+      }),
+    } as never;
+    const client = {
+      contacts: {
+        list: async () => ({
+          data: { object: "list", data: subscribers.map((s) => ({ id: s.resend_contact_id, email: s.email, unsubscribed: false })), has_more: false },
+          error: null,
+          headers: {},
+        }),
+      },
+      suppressions: {
+        list: async () =>
+          suppressionList === "fail"
+            ? { data: null, error: { name: "internal_server_error", message: "boom", statusCode: 500 }, headers: {} }
+            : { data: { object: "list", data: suppressionList.map((s) => ({ object: "suppression", origin: "bounce", source_id: "e", created_at: "", ...s })), has_more: false }, error: null, headers: {} },
+      },
+    } as never;
+    return async () => {
+      order.push("preflight");
+      return runBroadcastPreflight(preflightDb, client, "seg_prod");
+    };
+  }
+
+  for (const [label, list, expected] of [
+    ["a suppressed-but-subscribed Contact", [{ id: "sup_1", email: "user2@example.com" }], /Segment 구독인데 Resend 계정 suppression 대상 1건 \(sub-2\)/],
+    ["an unreadable suppression list", "fail", /Resend 계정 suppression 목록 조회 실패/],
+  ] as const) {
+    it(`${label} blocks before the run is reserved or any Broadcast exists`, async () => {
+      const o = orchestration(passing());
+      o.deps.runPreflight = realPreflight(o.order, list as "fail" | { id: string; email: string }[]);
+      const { db, updates } = campaignDb();
+      const result = await withSegmentEnv(() => sendClaimedCampaignViaBroadcast(db, campaign, newsletter, o.now, o.deps));
+
+      assert.equal(result.ok, false);
+      assert.deepEqual(o.order, ["preflight"]);
+      assert.equal(o.calls.create, 0);
+      assert.equal(o.calls.send.length, 0);
+      assert.equal(o.rows.length, 0);
+      assert.equal(updates[0].patch.status, "SCHEDULED");
+      const lastError = String(updates[0].patch.last_error);
+      assert.match(lastError, expected);
+      assert.equal(lastError.includes("@"), false);
+    });
+  }
+
+  it("with no account suppressions the real preflight passes into the existing flow", async () => {
+    const o = orchestration(passing());
+    o.deps.runPreflight = realPreflight(o.order, []);
+    const { db } = campaignDb();
+    const result = await withSegmentEnv(() => sendClaimedCampaignViaBroadcast(db, campaign, newsletter, o.now, o.deps));
+    assert.equal(result.ok, true);
+    assert.deepEqual(o.order, ["preflight", "recipients", "issue", "render", "reserve", "usage"]);
   });
 });

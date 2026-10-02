@@ -2,7 +2,13 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import type { WebhookEventPayload } from "resend";
-import { processResendWebhook, type SuppressionReason, type WebhookStore } from "./webhook-processor";
+import {
+  processResendWebhook,
+  type ProviderSuppressionResolver,
+  type SuppressionReason,
+  type WebhookStore,
+} from "./webhook-processor";
+import type { ProviderSuppressionCheck, ProviderSuppressionResolution, SuppressionClassification } from "./resend-suppressions";
 import { verifyResendWebhook } from "./resend-webhooks";
 
 // ---------------------------------------------------------------------------
@@ -28,15 +34,18 @@ type EventRow = {
 
 type Subscriber = { id: string; email: string; status: string; subscribed_at: string; unsubscribed_at: string | null };
 
-const RANK: Record<SuppressionReason, number> = { UNSUBSCRIBE: 0, BOUNCE: 1, COMPLAINT: 2 };
+// UNSUBSCRIBE < PROVIDER_SUPPRESSED < BOUNCE < COMPLAINT (0030).
+const RANK: Record<string, number> = { UNSUBSCRIBE: 0, PROVIDER_SUPPRESSED: 1, BOUNCE: 2, COMPLAINT: 3 };
+const PROVIDER_STATUS: Record<string, string> = { COMPLAINT: "UNSUBSCRIBED", BOUNCE: "BOUNCED", PROVIDER_SUPPRESSED: "SUPPRESSED" };
 const REASON = { resend_unsubscribe: "UNSUBSCRIBE", complaint: "COMPLAINT", permanent_bounce: "BOUNCE" } as const;
 
 function memoryDb(options: { subscribers?: Subscriber[]; broadcasts?: Record<string, string> } = {}) {
   const events: EventRow[] = [];
   const subscribers = options.subscribers ?? [];
   const broadcasts = options.broadcasts ?? {};
-  const suppressions = new Map<string, SuppressionReason>();
-  const failures = { claim: false, applySubscriberChange: 0, complete: 0 };
+  const suppressions = new Map<string, string>();
+  const failures = { claim: false, applySubscriberChange: 0, complete: 0, applyProviderSuppression: 0 };
+  const providerApplied: { email: string; reason: string; suppressionId: string | null }[] = [];
 
   const store: WebhookStore = {
     async claim({ svixId, eventType }) {
@@ -63,7 +72,7 @@ function memoryDb(options: { subscribers?: Subscriber[]; broadcasts?: Record<str
         failures.applySubscriberChange--;
         throw new Error(`update failed for ${change.email}`);
       }
-      const reason = REASON[change.reason];
+      const reason: SuppressionReason = REASON[change.reason];
       const suppress = () => {
         const current = suppressions.get(change.email);
         if (current === undefined || RANK[reason] > RANK[current]) suppressions.set(change.email, reason);
@@ -72,6 +81,11 @@ function memoryDb(options: { subscribers?: Subscriber[]; broadcasts?: Record<str
       if (!row) {
         if (reason !== "UNSUBSCRIBE") suppress();
         return { outcome: "not_found", subscriberId: null };
+      }
+      if (row.status === "SUPPRESSED" && reason !== "UNSUBSCRIBE") {
+        row.status = change.status;
+        suppress();
+        return { outcome: "updated", subscriberId: row.id };
       }
       if (row.status !== "SUBSCRIBED") {
         suppress();
@@ -84,6 +98,29 @@ function memoryDb(options: { subscribers?: Subscriber[]; broadcasts?: Record<str
       if (change.status === "UNSUBSCRIBED") row.unsubscribed_at = "now";
       suppress();
       return { outcome: "updated", subscriberId: row.id };
+    },
+    // Same rules as newsletter_apply_provider_suppression (tested for real in
+    // subscription-sql.test.ts).
+    async applyProviderSuppression(input) {
+      if (failures.applyProviderSuppression > 0) {
+        failures.applyProviderSuppression--;
+        throw new Error(`provider update failed for ${input.email}`);
+      }
+      const row = subscribers.find((s) => s.email === input.email);
+      if (!row) return { outcome: "not_found", subscriberId: null, previousStatus: null, newStatus: null, effectiveReason: null };
+      providerApplied.push({ email: input.email, reason: input.classification.reason, suppressionId: input.suppressionId });
+      const current = suppressions.get(input.email);
+      if (current === undefined || RANK[input.classification.reason] > RANK[current]) {
+        suppressions.set(input.email, input.classification.reason);
+      }
+      const effective = suppressions.get(input.email)!;
+      const target = PROVIDER_STATUS[effective];
+      const previous = row.status;
+      if (row.status === "SUBSCRIBED" || (row.status === "SUPPRESSED" && target !== "SUPPRESSED")) {
+        row.status = target;
+        return { outcome: "updated", subscriberId: row.id, previousStatus: previous, newStatus: target, effectiveReason: effective };
+      }
+      return { outcome: "already", subscriberId: row.id, previousStatus: previous, newStatus: previous, effectiveReason: effective };
     },
     async complete(eventId, input) {
       if (failures.complete > 0) {
@@ -123,7 +160,7 @@ function memoryDb(options: { subscribers?: Subscriber[]; broadcasts?: Record<str
     };
   }
 
-  return { store, events, subscribers, suppressions, failures, stats };
+  return { store, events, subscribers, suppressions, failures, stats, providerApplied };
 }
 
 function subscriber(email: string, overrides: Partial<Subscriber> = {}): Subscriber {
@@ -375,7 +412,8 @@ describe("webhook: events that aren't ours", () => {
     assert.deepEqual(result, { httpStatus: 200, result: "ignored", outcome: "not_newsletter" });
     assert.equal(db.subscribers[0].status, "SUBSCRIBED");
     assert.equal(db.suppressions.size, 0);
-    assert.equal(db.events[0].emailId, null);
+    // Stage 4.5 keeps the Resend email id (not an address) for diagnosis.
+    assert.equal(db.events[0].emailId, "e_tx");
   });
 
   it("ignores events of a Broadcast that isn't a 검레터 run (e.g. a manual test)", async () => {
@@ -432,5 +470,235 @@ describe("webhook: failures and retry", () => {
     assert.equal(logs.some((line) => line.includes("lee@example.com")), false);
     assert.equal(db.events[0].error?.includes("lee@example.com"), false);
     assert.ok(db.events[0].error?.includes("<email>"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Stage 4.5 — Resend account suppression
+// ---------------------------------------------------------------------------
+
+function classification(reason: "BOUNCE" | "COMPLAINT" | "PROVIDER_SUPPRESSED", verified = true): SuppressionClassification {
+  return {
+    reason,
+    basis: reason === "BOUNCE" ? "permanent_bounce" : reason === "COMPLAINT" ? "complaint_origin" : "manual_origin",
+    origin: reason === "COMPLAINT" ? "complaint" : reason === "BOUNCE" ? "bounce" : "manual",
+    bounceType: reason === "BOUNCE" ? "Permanent" : null,
+    bounceSubType: reason === "BOUNCE" ? "General" : null,
+    verified,
+  };
+}
+
+function resolver(answer: ProviderSuppressionResolution | (() => never)) {
+  const checks: ProviderSuppressionCheck[] = [];
+  const resolve: ProviderSuppressionResolver = async (check) => {
+    checks.push(check);
+    if (typeof answer === "function") return answer();
+    return answer;
+  };
+  return { resolve, checks };
+}
+
+const suppressed = (reason: "BOUNCE" | "COMPLAINT" | "PROVIDER_SUPPRESSED"): ProviderSuppressionResolution => ({
+  state: "suppressed",
+  suppressionId: "sup_1",
+  sourceEmailId: "e_src",
+  classification: classification(reason),
+});
+
+function legacySuppressed(to = "kim@example.com", emailId = "e_legacy") {
+  return {
+    type: "email.suppressed",
+    created_at: "2026-10-01T00:34:12Z",
+    data: { email_id: emailId, created_at: "", from: "news@news.moz9.kr", subject: "s", to: [to], suppressed: { type: "OnAccountSuppressionList", message: `${to} is suppressed` } },
+  } as unknown as WebhookEventPayload;
+}
+
+function suppressionEvent(type: "suppression.added" | "suppression.removed", email = "kim@example.com", origin = "bounce") {
+  return { type, created_at: "2026-10-01T00:34:13Z", data: { id: "sup_1", email, origin, source_id: "e_src", created_at: "" } } as unknown as WebhookEventPayload;
+}
+
+function runWith(db: ReturnType<typeof memoryDb>, event: WebhookEventPayload, resolve?: ProviderSuppressionResolver, webhookId = nextId()) {
+  return processResendWebhook({ webhookId, event }, { store: db.store, resolveProviderSuppression: resolve });
+}
+
+describe("webhook: email.suppressed (Stage 4.5)", () => {
+  it("legacy email.suppressed + confirmed permanent bounce → BOUNCED, Contact resync requested", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com")] });
+    const { resolve, checks } = resolver(suppressed("BOUNCE"));
+    const result = await runWith(db, legacySuppressed(), resolve);
+
+    assert.deepEqual(result, { httpStatus: 200, result: "processed", outcome: "provider_bounce_updated", resyncSubscriberId: "sub_kim" });
+    assert.equal(db.subscribers[0].status, "BOUNCED");
+    assert.equal(db.suppressions.get("kim@example.com"), "BOUNCE");
+    assert.equal(checks[0].trigger, "email.suppressed");
+    const row = db.events[0];
+    assert.equal(row.emailId, "e_legacy");
+    assert.equal(row.broadcastSendId, null); // never counted in a run's stats
+    assert.deepEqual(row.metadata, {
+      suppressed_type: "OnAccountSuppressionList",
+      provider_reason: "BOUNCE",
+      provider_basis: "permanent_bounce",
+      suppression_id: "sup_1",
+    });
+  });
+
+  it("complaint → UNSUBSCRIBED/COMPLAINT; unconfirmed → SUPPRESSED/PROVIDER_SUPPRESSED", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com"), subscriber("lee@example.com")] });
+    await runWith(db, legacySuppressed("kim@example.com", "e_1"), resolver(suppressed("COMPLAINT")).resolve);
+    await runWith(db, legacySuppressed("lee@example.com", "e_2"), resolver(suppressed("PROVIDER_SUPPRESSED")).resolve);
+    assert.deepEqual(db.subscribers.map((s) => s.status), ["UNSUBSCRIBED", "SUPPRESSED"]);
+    assert.equal(db.suppressions.get("kim@example.com"), "COMPLAINT");
+    assert.equal(db.suppressions.get("lee@example.com"), "PROVIDER_SUPPRESSED");
+  });
+
+  it("a resolver that throws fails closed: PROVIDER_SUPPRESSED, never BOUNCED", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com")] });
+    const { resolve } = resolver(() => {
+      throw new Error("Resend down");
+    });
+    const result = await runWith(db, legacySuppressed(), resolve);
+    assert.equal(result.outcome, "provider_provider_suppressed_updated");
+    assert.equal(db.subscribers[0].status, "SUPPRESSED");
+    assert.equal(db.events[0].metadata?.provider_basis, "suppression_lookup_failed");
+  });
+
+  it("no longer on the Resend list → nothing changes", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com")] });
+    const result = await runWith(db, legacySuppressed(), resolver({ state: "not_suppressed" }).resolve);
+    assert.equal(result.outcome, "provider_not_suppressed");
+    assert.equal(db.subscribers[0].status, "SUBSCRIBED");
+    assert.equal(db.suppressions.size, 0);
+  });
+
+  it("with reconciliation disabled it is recorded only (IGNORED provider_check_disabled)", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com")] });
+    const result = await runWith(db, legacySuppressed());
+    assert.deepEqual(result, { httpStatus: 200, result: "ignored", outcome: "provider_check_disabled" });
+    assert.equal(db.subscribers[0].status, "SUBSCRIBED");
+    assert.equal(db.events[0].emailId, "e_legacy");
+    assert.deepEqual(db.events[0].metadata, { suppressed_type: "OnAccountSuppressionList" });
+  });
+
+  it("a linked Broadcast email.suppressed counts in the run's stats and applies the suppression", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com")], broadcasts: { [BROADCAST]: SEND_ROW } });
+    const result = await runWith(
+      db,
+      emailEvent("email.suppressed", { suppressed: { type: "OnAccountSuppressionList", message: "" } }),
+      resolver(suppressed("BOUNCE")).resolve,
+    );
+    assert.equal(result.outcome, "broadcast_stat+provider_bounce_updated");
+    assert.equal(result.resyncSubscriberId, "sub_kim");
+    assert.equal(db.events[0].broadcastSendId, SEND_ROW);
+    assert.equal(db.subscribers[0].status, "BOUNCED");
+  });
+
+  it("an unlinked Broadcast email.suppressed still applies, without stats", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com")] });
+    const result = await runWith(db, emailEvent("email.suppressed"), resolver(suppressed("BOUNCE")).resolve);
+    assert.equal(result.outcome, "broadcast_not_linked+provider_bounce_updated");
+    assert.equal(db.events[0].broadcastSendId, null);
+    assert.equal(db.subscribers[0].status, "BOUNCED");
+  });
+
+  it("a DB failure while applying → 500 + FAILED; Resend's retry applies it once", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com")] });
+    db.failures.applyProviderSuppression = 1;
+    const { resolve } = resolver(suppressed("BOUNCE"));
+    const event = legacySuppressed();
+    const { result: first, logs } = await quietly(() => runWith(db, event, resolve, "msg_sup_retry"));
+    assert.equal(first.httpStatus, 500);
+    assert.equal(db.events[0].status, "FAILED");
+    assert.equal(logs.some((l) => l.includes("kim@example.com")), false);
+    assert.equal(db.events[0].error?.includes("kim@example.com"), false);
+
+    const second = await runWith(db, event, resolve, "msg_sup_retry");
+    assert.equal(second.httpStatus, 200);
+    assert.equal(db.subscribers[0].status, "BOUNCED");
+    assert.equal(db.providerApplied.length, 1);
+  });
+
+  it("does not touch addresses that aren't subscribers (service mail / promo)", async () => {
+    const db = memoryDb({ subscribers: [] });
+    const result = await runWith(db, legacySuppressed("prospect@example.com"), resolver(suppressed("BOUNCE")).resolve);
+    assert.equal(result.outcome, "provider_bounce_not_found");
+    assert.equal(db.suppressions.size, 0);
+  });
+});
+
+describe("webhook: suppression.added / suppression.removed (Stage 4.5)", () => {
+  it("suppression.added applies the classification", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com")] });
+    const { resolve, checks } = resolver(suppressed("BOUNCE"));
+    const result = await runWith(db, suppressionEvent("suppression.added"), resolve);
+    assert.equal(result.outcome, "provider_bounce_updated");
+    assert.deepEqual(checks[0], { trigger: "suppression.added", email: "kim@example.com", suppressionId: "sup_1", origin: "bounce", sourceEmailId: "e_src" });
+    assert.equal(db.subscribers[0].status, "BOUNCED");
+  });
+
+  it("a redelivered suppression.added is a duplicate: resolved and applied once", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com")] });
+    const { resolve, checks } = resolver(suppressed("BOUNCE"));
+    const event = suppressionEvent("suppression.added");
+    await runWith(db, event, resolve, "msg_dup_sup");
+    const again = await runWith(db, event, resolve, "msg_dup_sup");
+    assert.deepEqual(again, { httpStatus: 200, result: "duplicate" });
+    assert.equal(checks.length, 1);
+    assert.equal(db.providerApplied.length, 1);
+    assert.equal(db.events.length, 1);
+  });
+
+  it("suppression.added never downgrades a stronger stored cause", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com", { status: "UNSUBSCRIBED" })] });
+    db.suppressions.set("kim@example.com", "COMPLAINT");
+    await runWith(db, suppressionEvent("suppression.added", "kim@example.com", "manual"), resolver(suppressed("PROVIDER_SUPPRESSED")).resolve);
+    assert.equal(db.suppressions.get("kim@example.com"), "COMPLAINT");
+    assert.equal(db.subscribers[0].status, "UNSUBSCRIBED");
+  });
+
+  it("suppression.removed is recorded only — no re-subscribe, no resolver call", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com", { status: "BOUNCED" })] });
+    db.suppressions.set("kim@example.com", "BOUNCE");
+    const { resolve, checks } = resolver(suppressed("BOUNCE"));
+    const result = await runWith(db, suppressionEvent("suppression.removed"), resolve);
+    assert.deepEqual(result, { httpStatus: 200, result: "ignored", outcome: "suppression_removed" });
+    assert.equal(checks.length, 0);
+    assert.equal(db.subscribers[0].status, "BOUNCED");
+    assert.equal(db.suppressions.get("kim@example.com"), "BOUNCE");
+    assert.deepEqual(db.events[0].metadata, { suppression_id: "sup_1", origin: "bounce", source_email_id: "e_src" });
+  });
+
+  it("the Contact unsubscribe echo after a provider suppression keeps the cause", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com")] });
+    await runWith(db, suppressionEvent("suppression.added"), resolver(suppressed("PROVIDER_SUPPRESSED")).resolve);
+    const echo = await runWith(db, contactEvent("kim@example.com", true, "2026-12-31T00:00:00Z"));
+    assert.equal(echo.outcome, "subscriber_already");
+    assert.equal(db.subscribers[0].status, "SUPPRESSED");
+    assert.equal(db.suppressions.get("kim@example.com"), "PROVIDER_SUPPRESSED");
+  });
+});
+
+describe("webhook privacy (legacy and Broadcast events)", () => {
+  it("no event row stores an address in metadata / outcome / error", async () => {
+    const db = memoryDb({ subscribers: [subscriber("kim@example.com")], broadcasts: { [BROADCAST]: SEND_ROW } });
+    const { resolve } = resolver(suppressed("BOUNCE"));
+    const legacyBounce = {
+      type: "email.bounced",
+      created_at: "",
+      data: { email_id: "e_b", created_at: "", from: "news@news.moz9.kr", subject: "s", to: ["kim@example.com"], bounce: { type: "Permanent", subType: "General", message: "kim@example.com bounced" } },
+    } as unknown as WebhookEventPayload;
+    for (const e of [
+      legacySuppressed(),
+      legacyBounce,
+      emailEvent("email.suppressed", { suppressed: { type: "OnAccountSuppressionList", message: "kim@example.com" } }),
+      emailEvent("email.bounced", { bounce: { type: "Permanent", subType: "General", message: "kim@example.com" } }, "e_2"),
+      suppressionEvent("suppression.added"),
+      suppressionEvent("suppression.removed"),
+    ]) {
+      await runWith(db, e, resolve);
+    }
+    for (const row of db.events) {
+      const stored = JSON.stringify({ metadata: row.metadata, outcome: row.outcome, error: row.error, emailId: row.emailId });
+      assert.equal(stored.includes("@"), false, row.eventType);
+    }
   });
 });

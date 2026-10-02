@@ -193,7 +193,7 @@ describe("B1 end-to-end: suppression → failed sync → cron retry → prefligh
 
     const segment = () => [{ id: "c_1", email: row.email, unsubscribed: resendUnsubscribed }];
     const preflight = () =>
-      evaluateBroadcastPreflight({ subscribers: [row], suppressions, segmentContacts: segment() });
+      evaluateBroadcastPreflight({ subscribers: [row], suppressions, segmentContacts: segment(), accountSuppressions: [] });
 
     // 3rd line: before recovery the Broadcast is blocked.
     const before = preflight();

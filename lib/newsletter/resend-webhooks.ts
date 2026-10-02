@@ -1,4 +1,5 @@
 import { Resend, type WebhookEventPayload } from "resend";
+import { parseProviderOrigin, sanitizeProviderToken, type ProviderSuppressionCheck } from "./resend-suppressions";
 
 // Resend webhook: signature check + event planning (4단계).
 //
@@ -14,10 +15,18 @@ import { Resend, type WebhookEventPayload } from "resend";
 //     newsletter_subscribers, so this is newsletter data by definition.
 //   - email.* carrying a broadcast_id — but only once the processor has
 //     matched it to a 검레터 run in newsletter_broadcast_sends.
-// Everything else is recorded and ignored. In particular email.* events
-// without a broadcast_id are ignored: service mail (lib/mail.ts) uses the
-// same sender address as the legacy newsletter, so there is no safe way to
-// tell a legacy newsletter email from a transactional one.
+//   - Resend account suppression (Stage 4.5): email.suppressed (any mail —
+//     legacy, service or Broadcast) and suppression.added. Suppression is a
+//     fact about the *address*, whichever mail hit it, so the processor
+//     re-checks the address against the Resend suppression list and applies
+//     the classification to the matching subscriber, if any
+//     (resend-suppressions.ts / newsletter_apply_provider_suppression).
+//     suppression.removed is recorded only — never an automatic re-subscribe.
+// Everything else is recorded and ignored. In particular other email.*
+// events without a broadcast_id are ignored: service mail (lib/mail.ts) uses
+// the same sender address as the legacy newsletter, so there is no safe way
+// to tell a legacy newsletter email from a transactional one. Their email_id
+// and bounce / suppressed type are still kept for diagnosis.
 //
 // Kept free of Supabase / Next.js imports so it can be unit-tested.
 
@@ -71,14 +80,21 @@ export type SubscriberStatusChange = {
   email: string;
 };
 
-export type IgnoreReason = "not_newsletter" | "unsupported_type" | "contact_not_unsubscribed" | "missing_data";
+export type IgnoreReason =
+  | "not_newsletter"
+  | "unsupported_type"
+  | "contact_not_unsubscribed"
+  | "missing_data"
+  | "suppression_removed";
 
 export type WebhookPlan = {
   eventType: string;
   eventCreatedAt: string | null;
   metadata: Record<string, string>;
 } & (
-  | { kind: "ignore"; reason: IgnoreReason }
+  // emailId: Resend's id of the email when the event has one — kept for
+  // diagnosis (it is not an address).
+  | { kind: "ignore"; reason: IgnoreReason; emailId?: string | null }
   | { kind: "contact_unsubscribed"; contactId: string | null; change: SubscriberStatusChange }
   | {
       kind: "broadcast_email";
@@ -86,7 +102,11 @@ export type WebhookPlan = {
       emailId: string;
       // Applied only if the broadcast turns out to be a 검레터 run.
       change: SubscriberStatusChange | null;
+      // email.suppressed: the address is re-checked whether or not the
+      // broadcast is linked.
+      providerCheck: ProviderSuppressionCheck | null;
     }
+  | { kind: "provider_suppression"; emailId: string | null; check: ProviderSuppressionCheck }
 );
 
 const EMAIL_EVENT_TYPES = new Set([
@@ -144,30 +164,54 @@ export function planResendWebhookEvent(event: WebhookEventPayload): WebhookPlan 
     };
   }
 
+  // Not part of the SDK's WebhookEventPayload union (resend ^6.18).
+  const eventType: string = event.type;
+  if (eventType === "suppression.added" || eventType === "suppression.removed") {
+    return planSuppressionEvent(eventType, base, (event as { data?: unknown }).data);
+  }
+
   if (!EMAIL_EVENT_TYPES.has(event.type)) {
     return { ...base, metadata: {}, kind: "ignore", reason: "unsupported_type" };
   }
 
   const data = event.data as { broadcast_id?: unknown; email_id?: unknown; to?: unknown };
   const broadcastId = typeof data.broadcast_id === "string" && data.broadcast_id ? data.broadcast_id : null;
-  // No broadcast id: legacy newsletter or service mail — not distinguishable,
-  // so neither is touched.
-  if (!broadcastId) return { ...base, metadata: {}, kind: "ignore", reason: "not_newsletter" };
-
-  const emailId = typeof data.email_id === "string" && data.email_id ? data.email_id : null;
-  if (!emailId) return { ...base, metadata: {}, kind: "ignore", reason: "missing_data" };
-
-  const metadata: Record<string, string> = {};
-  let change: SubscriberStatusChange | null = null;
+  const emailId = sanitizeResendId(data.email_id);
   const recipient = normalizeEmail(Array.isArray(data.to) ? data.to[0] : undefined);
 
+  // Ids and classification tokens only — never addresses or message text.
+  const metadata: Record<string, string> = {};
+  let bounceType: string | null = null;
   if (event.type === "email.bounced") {
-    const bounce = event.data.bounce ?? { type: "", subType: "" };
-    if (bounce.type) metadata.bounce_type = String(bounce.type);
-    if (bounce.subType) metadata.bounce_sub_type = String(bounce.subType);
+    bounceType = sanitizeProviderToken(event.data.bounce?.type);
+    const subType = sanitizeProviderToken(event.data.bounce?.subType);
+    if (bounceType) metadata.bounce_type = bounceType;
+    if (subType) metadata.bounce_sub_type = subType;
+  } else if (event.type === "email.suppressed") {
+    const suppressedType = sanitizeProviderToken(event.data.suppressed?.type);
+    if (suppressedType) metadata.suppressed_type = suppressedType;
+  }
+
+  const providerCheck: ProviderSuppressionCheck | null =
+    event.type === "email.suppressed" && recipient
+      ? { trigger: "email.suppressed", email: recipient, suppressionId: null, origin: null, sourceEmailId: null }
+      : null;
+
+  if (!broadcastId) {
+    if (providerCheck) return { ...base, metadata, kind: "provider_suppression", emailId, check: providerCheck };
+    // No broadcast id: legacy newsletter or service mail — not
+    // distinguishable, so neither is touched.
+    const reason: IgnoreReason = event.type === "email.suppressed" ? "missing_data" : "not_newsletter";
+    return { ...base, metadata, kind: "ignore", reason, emailId };
+  }
+
+  if (!emailId) return { ...base, metadata, kind: "ignore", reason: "missing_data" };
+
+  let change: SubscriberStatusChange | null = null;
+  if (event.type === "email.bounced") {
     // Only a Permanent bounce (hard bounce) takes the address out for good.
     // Transient / Undetermined bounces are stats only.
-    if (recipient && String(bounce.type).toLowerCase() === "permanent") {
+    if (recipient && bounceType?.toLowerCase() === "permanent") {
       change = { status: "BOUNCED", reason: "permanent_bounce", email: recipient };
     }
   } else if (event.type === "email.complained") {
@@ -177,7 +221,44 @@ export function planResendWebhookEvent(event: WebhookEventPayload): WebhookPlan 
     if (link) metadata.link = link;
   }
 
-  return { ...base, metadata, kind: "broadcast_email", broadcastId, emailId, change };
+  return { ...base, metadata, kind: "broadcast_email", broadcastId, emailId, change, providerCheck };
+}
+
+// suppression.added / suppression.removed:
+//   data: { id, email, origin: bounce | complaint | manual, source_id, created_at }
+function planSuppressionEvent(
+  eventType: "suppression.added" | "suppression.removed",
+  base: { eventType: string; eventCreatedAt: string | null },
+  data: unknown,
+): WebhookPlan {
+  const d = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  const suppressionId = sanitizeResendId(d.id);
+  const origin = parseProviderOrigin(d.origin);
+  const sourceEmailId = sanitizeResendId(d.source_id);
+
+  const metadata: Record<string, string> = {};
+  if (suppressionId) metadata.suppression_id = suppressionId;
+  if (origin) metadata.origin = origin;
+  if (sourceEmailId) metadata.source_email_id = sourceEmailId;
+
+  // Recorded only: leaving Resend's list never re-subscribes anyone.
+  if (eventType === "suppression.removed") return { ...base, metadata, kind: "ignore", reason: "suppression_removed" };
+
+  const email = normalizeEmail(d.email);
+  if (!email) return { ...base, metadata, kind: "ignore", reason: "missing_data" };
+  return {
+    ...base,
+    metadata,
+    kind: "provider_suppression",
+    emailId: null,
+    check: { trigger: "suppression.added", email, suppressionId, origin, sourceEmailId },
+  };
+}
+
+function sanitizeResendId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const id = value.trim();
+  return /^[A-Za-z0-9_-]{1,100}$/.test(id) ? id : null;
 }
 
 // Log-safe summary (no addresses, no links).
@@ -185,7 +266,10 @@ export function describeWebhookPlan(plan: WebhookPlan): string {
   const parts = [plan.eventType, plan.kind];
   if (plan.kind === "ignore") parts.push(plan.reason);
   if (plan.kind === "broadcast_email") parts.push(`broadcast=${plan.broadcastId}`);
-  const change = plan.kind === "ignore" ? null : plan.change;
+  if (plan.kind === "provider_suppression" || (plan.kind === "broadcast_email" && plan.providerCheck)) {
+    parts.push("provider_check");
+  }
+  const change = plan.kind === "contact_unsubscribed" || plan.kind === "broadcast_email" ? plan.change : null;
   if (change) parts.push(`subscriber→${change.status}(${change.reason})`);
   return parts.join(" ");
 }

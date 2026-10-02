@@ -9,6 +9,7 @@ export const SUBSCRIBER_STATUS_LABEL: Record<string, string> = {
   SUBSCRIBED: "구독중",
   UNSUBSCRIBED: "수신거부",
   BOUNCED: "반송됨",
+  SUPPRESSED: "발송 차단",
 };
 
 export const SUBSCRIBER_SOURCE_LABEL: Record<string, string> = {

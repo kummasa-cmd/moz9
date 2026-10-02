@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SubscriberStatusChange } from "./resend-webhooks";
 import type { ClaimResult, CompleteInput, SubscriberChangeResult, SuppressionReason, WebhookStore } from "./webhook-processor";
+import { applyProviderSuppressionRpc } from "./suppression-reconcile";
 
 // Supabase side of webhook-processor.ts (4단계). Every method either succeeds
 // or throws; the processor turns a throw into FAILED + HTTP 500 so Resend
@@ -91,6 +92,9 @@ export function createWebhookStore(db: SupabaseClient, now: () => Date = () => n
       if (!outcome || !OUTCOMES.has(outcome)) throw new Error("구독자 수신거부 반영 결과를 해석할 수 없습니다.");
       return { outcome, subscriberId: row?.subscriber_id ?? null };
     },
+
+    // Resend account suppression — newsletter_apply_provider_suppression (0030).
+    applyProviderSuppression: (input) => applyProviderSuppressionRpc(db, input),
 
     async complete(eventId, input: CompleteInput) {
       const { error } = await events()

@@ -11,7 +11,7 @@ import {
   type PreflightSubscriber,
   type PreflightSuppression,
   type SegmentContact,
-  type SegmentContactsClient,
+  type PreflightClient,
 } from "./broadcast-preflight";
 import { campaignDueAt, preflightBlockedOutcome, PREFLIGHT_RETRY_WINDOW_MS } from "./broadcast-run";
 
@@ -37,7 +37,7 @@ function contact(n: number, unsubscribed = false): SegmentContact {
 function healthy(size = 96) {
   const subscribers = Array.from({ length: size }, (_, i) => subscriber(i + 1));
   const segmentContacts = Array.from({ length: size }, (_, i) => contact(i + 1));
-  return { subscribers, segmentContacts, suppressions: [] as PreflightSuppression[] };
+  return { subscribers, segmentContacts, suppressions: [] as PreflightSuppression[], accountSuppressions: [] as { email: string }[] };
 }
 
 const codes = (issues: { code: string }[]) => issues.map((i) => i.code);
@@ -173,9 +173,21 @@ describe("describePreflightIssues", () => {
   });
 });
 
-function pagedClient(pages: SegmentContact[][], options: { failAt?: number; stuck?: boolean } = {}) {
+function pagedClient(
+  pages: SegmentContact[][],
+  options: { failAt?: number; stuck?: boolean; accountSuppressions?: { id: string; email: string }[] | "fail" } = {},
+) {
   const calls: unknown[] = [];
   const client = {
+    suppressions: {
+      list: async () => {
+        if (options.accountSuppressions === "fail") {
+          return { data: null, error: { name: "restricted_api_key", message: "nope", statusCode: 401 }, headers: {} };
+        }
+        const data = (options.accountSuppressions ?? []).map((s) => ({ object: "suppression", origin: "bounce", source_id: null, created_at: SYNCED, ...s }));
+        return { data: { object: "list", data, has_more: false }, error: null, headers: {} };
+      },
+    },
     contacts: {
       list: async (args: unknown) => {
         calls.push(args);
@@ -187,7 +199,7 @@ function pagedClient(pages: SegmentContact[][], options: { failAt?: number; stuc
         return { data: { object: "list", data: page, has_more: options.stuck ? true : index < pages.length - 1 }, error: null, headers: {} };
       },
     },
-  } as unknown as SegmentContactsClient;
+  } as unknown as PreflightClient;
   return { client, calls };
 }
 
@@ -253,5 +265,90 @@ describe("preflight retry window", () => {
     assert.equal(preflightBlockedOutcome(scheduled, new Date("2026-10-01T02:00:00Z")).status, "SCHEDULED");
     assert.equal(preflightBlockedOutcome(scheduled, new Date("2026-10-01T02:00:01Z")).status, "FAILED");
     assert.equal(preflightBlockedOutcome(scheduled, new Date("2026-10-01T02:00:01Z")).retryUntil.toISOString(), "2026-10-01T02:00:00.000Z");
+  });
+});
+
+describe("evaluateBroadcastPreflight — Resend account suppression (Stage 4.5)", () => {
+  it("blocks when a subscribed Contact in the segment is on the account suppression list", () => {
+    const input = healthy();
+    input.accountSuppressions = [{ email: "USER3@example.com" }];
+    const result = evaluateBroadcastPreflight(input);
+    assert.equal(result.ok, false);
+    assert.deepEqual(codes(result.blocking), ["RESEND_SUPPRESSED_BUT_SUBSCRIBED"]);
+    assert.deepEqual(result.blocking[0].sampleIds, ["sub-0003"]);
+    const text = describePreflightIssues(result.blocking);
+    assert.match(text, /Segment 구독인데 Resend 계정 suppression 대상 1건 \(sub-0003\)/);
+    assert.equal(text.includes("@"), false);
+  });
+
+  it("the production blind spot: 5 SUBSCRIBED + synced + segment-subscribed addresses on the list → BLOCK", () => {
+    const input = healthy(97);
+    input.accountSuppressions = [1, 2, 3, 4, 5].map((n) => ({ email: `user${n}@example.com` }));
+    const result = evaluateBroadcastPreflight(input);
+    assert.equal(result.ok, false);
+    assert.equal(result.blocking[0].code, "RESEND_SUPPRESSED_BUT_SUBSCRIBED");
+    assert.equal(result.blocking[0].count, 5);
+  });
+
+  it("passes once those Contacts are unsubscribed and the rows are no longer eligible", () => {
+    const input = healthy();
+    input.accountSuppressions = [{ email: "user3@example.com" }];
+    input.subscribers[2] = subscriber(3, { status: "BOUNCED" });
+    input.segmentContacts[2] = contact(3, true);
+    assert.equal(evaluateBroadcastPreflight(input).ok, true);
+  });
+
+  it("ignores suppressed addresses that aren't subscribed in the segment (e.g. promo prospects)", () => {
+    const input = healthy();
+    input.accountSuppressions = [{ email: "prospect@example.com" }, { email: "other@example.com" }];
+    assert.equal(evaluateBroadcastPreflight(input).ok, true);
+  });
+});
+
+describe("runBroadcastPreflight — account suppression list", () => {
+  function preflightDb(subscribers: PreflightSubscriber[]) {
+    return {
+      from: (table: string) => ({
+        select: () => ({
+          order: () => ({
+            range: async (from: number) => ({
+              data: from > 0 ? [] : table === "newsletter_subscribers" ? subscribers : [],
+              error: null,
+            }),
+          }),
+        }),
+      }),
+    } as never;
+  }
+
+  it("passes with 0 account suppressions and a matching DB / segment", async () => {
+    const { subscribers, segmentContacts } = healthy(3);
+    const { client } = pagedClient([segmentContacts], { accountSuppressions: [] });
+    const result = await runBroadcastPreflight(preflightDb(subscribers), client, "seg");
+    assert.deepEqual(result, { ok: true, blocking: [], warnings: [], eligible: 3, segmentSubscribed: 3 });
+  });
+
+  it("blocks with RESEND_SUPPRESSED_BUT_SUBSCRIBED from the real list read", async () => {
+    const { subscribers, segmentContacts } = healthy(3);
+    const { client } = pagedClient([segmentContacts], { accountSuppressions: [{ id: "sup_1", email: "user2@example.com" }] });
+    const result = await runBroadcastPreflight(preflightDb(subscribers), client, "seg");
+    assert.deepEqual(codes(result.blocking), ["RESEND_SUPPRESSED_BUT_SUBSCRIBED"]);
+  });
+
+  it("blocks with SUPPRESSION_READ_FAILED when the suppression list can't be read (never throws, no address logged)", async () => {
+    const { subscribers, segmentContacts } = healthy(3);
+    const { client } = pagedClient([segmentContacts], { accountSuppressions: "fail" });
+    const logs: string[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => logs.push(args.map(String).join(" "));
+    try {
+      const result = await runBroadcastPreflight(preflightDb(subscribers), client, "seg");
+      assert.equal(result.ok, false);
+      assert.deepEqual(codes(result.blocking), ["SUPPRESSION_READ_FAILED"]);
+      assert.equal(describePreflightIssues(result.blocking), "Resend 계정 suppression 목록 조회 실패");
+    } finally {
+      console.error = original;
+    }
+    assert.equal(logs.join(" ").includes("@"), false);
   });
 });

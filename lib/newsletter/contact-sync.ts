@@ -12,6 +12,13 @@ import {
   type ResendContactsClient,
   type RetryOptions,
 } from "./resend-contacts";
+import type { SuppressionLookupClient } from "./resend-suppressions";
+import {
+  createReconcileStore,
+  reconcileProviderSuppressions,
+  summarizeReconcile,
+  type ReconcileSummary,
+} from "./suppression-reconcile";
 
 // Supabase ↔ Resend Contacts wiring for the regular newsletter (2단계).
 // Supabase stays the source of truth: every function here runs *after* the
@@ -31,6 +38,21 @@ function getSegmentId(): string | null {
 // Only this Contacts client gets the email-masking error logger; the send
 // path's Resend instances (scheduler.ts, lib/mail.ts) are left untouched.
 export function createContactsClient(): ResendContactsClient {
+  return installSdkErrorLogger(new Resend(process.env.RESEND_API_KEY));
+}
+
+// Resend account suppression → Supabase (Stage 4.5). Off unless
+// NEWSLETTER_SUPPRESSION_RECONCILE_ENABLED=true: once on, the contact-sync
+// cron and the webhook move suppressed subscribers out of SUBSCRIBED on
+// their own, so it is switched on only after the first reconciliation has
+// been reviewed (scripts/newsletter/reconcile-resend-suppressions.ts).
+// The Broadcast preflight's suppression check doesn't depend on it.
+export function isSuppressionReconcileEnabled(): boolean {
+  return process.env.NEWSLETTER_SUPPRESSION_RECONCILE_ENABLED === "true" && !!process.env.RESEND_API_KEY;
+}
+
+// Read-only use: suppressions list/get + emails.get.
+export function createSuppressionsClient(): SuppressionLookupClient {
   return installSdkErrorLogger(new Resend(process.env.RESEND_API_KEY));
 }
 
@@ -293,4 +315,77 @@ export async function retryPendingContactSyncs(
   }
 
   return summary;
+}
+
+// ---------------------------------------------------------------------------
+// The contact-sync cron cycle: suppression reconciliation, then Contact retries
+// ---------------------------------------------------------------------------
+
+export type ReconcileCronResult =
+  | { skipped: "disabled" | "contact_sync_disabled" | "campaign_sending" }
+  | ReturnType<typeof summarizeReconcile>;
+
+export type ContactSyncCycleResult = {
+  // false when the reconciliation couldn't read Resend / Supabase or some
+  // subscriber failed to apply — the route answers non-2xx so the scheduler
+  // shows it, instead of passing it off as success.
+  ok: boolean;
+  summary: PendingSyncSummary & { reconciliation: ReconcileCronResult };
+};
+
+export type ContactSyncCycleDeps = {
+  contactSyncEnabled: () => boolean;
+  reconcileEnabled: () => boolean;
+  campaignSending: () => Promise<boolean>;
+  reconcile: () => Promise<ReconcileSummary>;
+  retryPending: () => Promise<PendingSyncSummary>;
+};
+
+// Reconciliation runs first so the rows it moves out of SUBSCRIBED
+// (resend_synced_at = NULL) are pushed to Resend by the retry pass of the
+// same run. A reconciliation failure doesn't stop the Contact retries.
+// Both stand down while a campaign is SENDING (shared Resend rate limit).
+export async function runContactSyncCycle(deps: ContactSyncCycleDeps): Promise<ContactSyncCycleResult> {
+  const idle: PendingSyncSummary = { attempted: 0, succeeded: 0, failed: 0 };
+  if (!deps.contactSyncEnabled()) {
+    return { ok: true, summary: { ...idle, skipped: "disabled", reconciliation: { skipped: "contact_sync_disabled" } } };
+  }
+  if (await deps.campaignSending()) {
+    return { ok: true, summary: { ...idle, skipped: "campaign_sending", reconciliation: { skipped: "campaign_sending" } } };
+  }
+
+  let reconciliation: ReconcileCronResult = { skipped: "disabled" };
+  let ok = true;
+  if (deps.reconcileEnabled()) {
+    const result = await deps.reconcile();
+    reconciliation = summarizeReconcile(result);
+    ok = result.ok;
+    if (!result.ok) {
+      console.error("[newsletter] Resend suppression 정합화 실패:", result.error ?? `${result.failed}건 반영 실패`);
+    }
+  }
+
+  const sync = await deps.retryPending();
+  return { ok, summary: { ...sync, reconciliation } };
+}
+
+// Per-run cap on suppressions classified (each may cost one GET /emails);
+// the rest are counted as deferred and picked up by the next run.
+const RECONCILE_MAX_CHECKS_PER_RUN = 10;
+
+export async function runContactSyncCron(): Promise<ContactSyncCycleResult> {
+  const db = createAdminClient();
+  return runContactSyncCycle({
+    contactSyncEnabled: isContactSyncEnabled,
+    reconcileEnabled: isSuppressionReconcileEnabled,
+    campaignSending: () => isCampaignSending(db),
+    reconcile: () =>
+      reconcileProviderSuppressions({
+        store: createReconcileStore(db),
+        client: createSuppressionsClient(),
+        apply: true,
+        maxChecks: RECONCILE_MAX_CHECKS_PER_RUN,
+      }),
+    retryPending: () => retryPendingContactSyncs(),
+  });
 }

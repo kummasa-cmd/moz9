@@ -3,7 +3,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { describeWebhookPlan, planResendWebhookEvent, verifyResendWebhook } from "@/lib/newsletter/resend-webhooks";
 import { processResendWebhook } from "@/lib/newsletter/webhook-processor";
 import { createWebhookStore } from "@/lib/newsletter/webhook-store";
-import { syncSubscriberContact } from "@/lib/newsletter/contact-sync";
+import {
+  createSuppressionsClient,
+  isSuppressionReconcileEnabled,
+  syncSubscriberContact,
+} from "@/lib/newsletter/contact-sync";
+import { resolveProviderSuppression } from "@/lib/newsletter/resend-suppressions";
 
 // Resend webhook endpoint (4단계). Verifies the Svix signature, then applies
 // the event to Supabase through webhook-processor.ts (idempotent on svix-id).
@@ -20,9 +25,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: verified.error }, { status: verified.status });
   }
 
+  // email.suppressed / suppression.added are applied to subscribers only
+  // while NEWSLETTER_SUPPRESSION_RECONCILE_ENABLED=true; otherwise they're
+  // recorded (IGNORED provider_check_disabled) and the cron / script picks
+  // the address up later from the Resend suppression list.
+  const resolver = isSuppressionReconcileEnabled()
+    ? (() => {
+        const client = createSuppressionsClient();
+        return (check: Parameters<typeof resolveProviderSuppression>[1]) => resolveProviderSuppression(client, check);
+      })()
+    : undefined;
+
   const result = await processResendWebhook(
     { webhookId: verified.webhookId, event: verified.event },
-    { store: createWebhookStore(createAdminClient()) },
+    { store: createWebhookStore(createAdminClient()), resolveProviderSuppression: resolver },
   );
 
   // Log-safe: svix id, event type, plan summary, result — never addresses.
@@ -34,7 +50,7 @@ export async function POST(request: NextRequest) {
     result.outcome ?? "",
   );
 
-  // Complaint / bounce changed a subscriber Resend still has as subscribed —
+  // Complaint / bounce / provider suppression changed a subscriber Resend still has as subscribed —
   // push it now rather than waiting for the retry job. No-op unless
   // NEWSLETTER_CONTACT_SYNC_ENABLED=true; failures are only recorded.
   if (result.resyncSubscriberId) {

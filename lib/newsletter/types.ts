@@ -1,7 +1,9 @@
 import type { ContentBlock } from "./blocks/types";
 
 export type SubscriberSource = "WEBSITE" | "MEMBER_SIGNUP" | "IMPORT" | "MANUAL" | "CONTACT_FORM";
-export type SubscriberStatus = "SUBSCRIBED" | "UNSUBSCRIBED" | "BOUNCED";
+// SUPPRESSED: on the Resend account suppression list, cause not confirmed as a
+// bounce or complaint (0030) — not a recipient, no site re-subscribe.
+export type SubscriberStatus = "SUBSCRIBED" | "UNSUBSCRIBED" | "BOUNCED" | "SUPPRESSED";
 
 export type Subscriber = {
   id: string;

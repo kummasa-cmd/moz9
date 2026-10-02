@@ -25,7 +25,7 @@ import { PAGE_SIZE_OPTIONS, type SubscriberRow } from "../types";
 
 function statusVariant(status: string) {
   if (status === "SUBSCRIBED") return "default" as const;
-  if (status === "BOUNCED") return "destructive" as const;
+  if (status === "BOUNCED" || status === "SUPPRESSED") return "destructive" as const;
   return "secondary" as const;
 }
 
@@ -148,7 +148,7 @@ export default function SubscribersTable({
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="inline-flex items-center gap-3">
-                    {s.status !== "BOUNCED" && (
+                    {s.status !== "BOUNCED" && s.status !== "SUPPRESSED" && (
                       <form action={setStatusAction}>
                         <input type="hidden" name="id" value={s.id} />
                         <input
