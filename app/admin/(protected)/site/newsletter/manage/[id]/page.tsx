@@ -10,7 +10,7 @@ import { ImageUpload } from "@/components/admin/newsletter/ImageUpload";
 import { BlockEditor } from "@/components/admin/newsletter/BlockEditor";
 import { CampaignSection } from "@/components/admin/newsletter/CampaignSection";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getColumnBoardPosts } from "@/lib/newsletter/queries";
+import { getActiveTestRecipientCount, getColumnBoardPosts } from "@/lib/newsletter/queries";
 import { saveNewsletterCampaign } from "../actions";
 import type { ContentBlock } from "@/lib/newsletter/blocks/types";
 import { utcIsoToKstDatetimeLocal } from "@/lib/newsletter/schedule-time";
@@ -22,15 +22,15 @@ import {
 
 type Props = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string }>;
 };
 
 export default async function AdminNewsletterManageEditPage({ params, searchParams }: Props) {
   const { id } = await params;
-  const { error } = await searchParams;
+  const { error, notice } = await searchParams;
 
   const supabase = createAdminClient();
-  const [{ data: newsletter }, { data: banners }, { data: campaign }, boardPosts] = await Promise.all([
+  const [{ data: newsletter }, { data: banners }, { data: campaign }, boardPosts, testRecipientCount] = await Promise.all([
     supabase
       .from("newsletters")
       .select("id, title, slug, subject, preheader, thumbnail_url, status, blocks")
@@ -51,6 +51,7 @@ export default async function AdminNewsletterManageEditPage({ params, searchPara
       .limit(1)
       .maybeSingle(),
     getColumnBoardPosts(),
+    getActiveTestRecipientCount(),
   ]);
 
   if (!newsletter) notFound();
@@ -169,8 +170,10 @@ export default async function AdminNewsletterManageEditPage({ params, searchPara
           defaultTargetAll={campaign?.target_all ?? true}
           defaultTargetTags={(campaign?.target_tags ?? []).join(", ")}
           lockedReason={campaignLockedReason}
+          testRecipientCount={testRecipientCount}
         />
 
+        {notice && <p className="text-sm text-primary">{notice}</p>}
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <button

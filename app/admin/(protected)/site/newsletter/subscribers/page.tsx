@@ -13,12 +13,20 @@ import {
   setSubscriberStatus,
 } from "./actions";
 import SubscribersTable from "./SubscribersTable";
+import TestRecipientsPanel from "./TestRecipientsPanel";
 import { PAGE_SIZE_OPTIONS, type SubscriberRow } from "../types";
 
 const DEFAULT_PAGE_SIZE = 20;
 
 type Props = {
-  searchParams: Promise<{ page?: string; limit?: string; error?: string; imported?: string }>;
+  searchParams: Promise<{
+    page?: string;
+    limit?: string;
+    error?: string;
+    imported?: string;
+    test_notice?: string;
+    test_error?: string;
+  }>;
 };
 
 export default async function AdminNewsletterSubscribersPage({ searchParams }: Props) {
@@ -111,6 +119,8 @@ export default async function AdminNewsletterSubscribersPage({ searchParams }: P
           </button>
         </form>
       </div>
+
+      <TestRecipientsPanel notice={sp.test_notice} error={sp.test_error} />
 
       {error && (
         <p className="text-sm text-destructive mb-4">목록을 불러오지 못했습니다: {error.message}</p>

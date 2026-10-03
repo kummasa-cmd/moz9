@@ -485,3 +485,14 @@ export async function getNewsletterTemplates(): Promise<NewsletterTemplate[]> {
 
   return (data ?? []).map(mapNewsletterTemplate);
 }
+
+// Active test recipients (newsletter_test_recipients, 0032) for the editor's
+// "테스트 계정" target. null when the list can't be read — e.g. before the
+// migration is applied — so the editor still renders.
+export async function getActiveTestRecipientCount(): Promise<number | null> {
+  const { count, error } = await createAdminClient()
+    .from("newsletter_test_recipients")
+    .select("*", { count: "exact", head: true })
+    .eq("active", true);
+  return error ? null : (count ?? 0);
+}

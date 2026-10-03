@@ -7,6 +7,9 @@ import { processCampaign } from "@/lib/newsletter/scheduler";
 import { assignNewsletterIssueNumber, recordBoardPostNewsletterUsage } from "@/lib/newsletter/queries";
 import { getSourcePostIds, type ContentBlock } from "@/lib/newsletter/blocks/types";
 import { kstDatetimeLocalToUtcIso } from "@/lib/newsletter/schedule-time";
+import { newsletterFromAddress, renderBroadcastHtml } from "@/lib/newsletter/broadcast-sender";
+import { getResendClient } from "@/lib/newsletter/email";
+import { sendNewsletterTest } from "@/lib/newsletter/test-send";
 import {
   createCampaignSaveStore,
   saveCampaignSchedule,
@@ -21,6 +24,32 @@ function parseBlocks(raw: FormDataEntryValue | null): ContentBlock[] {
   } catch {
     return [];
   }
+}
+
+// Saved content → active test recipients, as transactional mail with the
+// Broadcast rendering (lib/newsletter/test-send.ts). No campaign, delivery
+// row, issue number or Resend Contact is created.
+async function sendNewsletterTestFor(newsletterId: string) {
+  const supabase = createAdminClient();
+  const { data: newsletter } = await supabase
+    .from("newsletters")
+    .select("id, slug, subject, blocks, published_at, issue_number")
+    .eq("id", newsletterId)
+    .maybeSingle();
+  if (!newsletter) return { ok: false as const, error: "뉴스레터를 찾을 수 없습니다." };
+
+  return sendNewsletterTest(
+    { from: newsletterFromAddress(), subject: newsletter.subject },
+    {
+      loadRecipients: async () => {
+        const { data, error } = await supabase.from("newsletter_test_recipients").select("email, active");
+        if (error) throw new Error(`테스트 계정 목록 조회 실패: ${error.message}`);
+        return data ?? [];
+      },
+      renderHtml: () => renderBroadcastHtml(newsletter, (newsletter.issue_number as number | null) ?? null),
+      sendBatch: (payloads) => getResendClient().batch.send(payloads),
+    },
+  );
 }
 
 function slugify(input: string): string {
@@ -98,15 +127,34 @@ export async function saveNewsletterCampaign(id: string | null, formData: FormDa
   }
 
   const afterSaveEditUrl = `/admin/site/newsletter/manage/${newsletterId}`;
-  const enableCampaign = formData.get("enable_campaign") === "on";
+  // "테스트 계정" target: send the saved newsletter to the test list only —
+  // the campaign fields aren't submitted and no campaign is touched.
+  const testSend = formData.get("send_target") === "TEST";
+  const enableCampaign = !testSend && formData.get("enable_campaign") === "on";
 
   // Pure web publish (no email campaign) is visible immediately, so it counts
   // as a real publish right away. When a campaign is attached, the issue
   // number is assigned later at the actual send (processCampaign in
   // scheduler.ts) — a PUBLISHED newsletter waiting on an unsent SCHEDULED
-  // campaign ("임시 대기") must not be counted yet.
+  // campaign ("임시 대기") must not be counted yet. A test send doesn't say
+  // which it is, so it only numbers a newsletter that has no campaign at all.
   if (isFirstPublish && !enableCampaign) {
-    await assignNewsletterIssueNumber(newsletterId!);
+    const hasCampaign = testSend
+      ? !!(await supabase.from("newsletter_campaigns").select("id").eq("newsletter_id", newsletterId!).limit(1).maybeSingle()).data
+      : false;
+    if (!hasCampaign) await assignNewsletterIssueNumber(newsletterId!);
+  }
+
+  if (testSend) {
+    const result = await sendNewsletterTestFor(newsletterId!);
+    revalidatePath("/admin/site/newsletter/list");
+    revalidatePath("/newsletter");
+    revalidatePath(`/newsletter/${encodeURIComponent(slug)}`);
+    redirect(
+      result.ok
+        ? `${afterSaveEditUrl}?notice=${encodeURIComponent(`테스트 계정 ${result.sent}명에게 테스트 메일을 보냈습니다. (구독자 발송·캠페인에는 영향 없음)`)}`
+        : `${afterSaveEditUrl}?error=${encodeURIComponent(result.error)}`,
+    );
   }
 
   if (enableCampaign) {

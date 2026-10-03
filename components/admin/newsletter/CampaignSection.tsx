@@ -20,7 +20,12 @@ type Props = {
   // settings are shown read-only and not submitted. The server action
   // enforces the same rule (lib/newsletter/campaign-save.ts).
   lockedReason?: string | null;
+  // Active rows of newsletter_test_recipients; null when the list couldn't be
+  // read (e.g. migration 0032 not applied yet).
+  testRecipientCount?: number | null;
 };
+
+type SendTarget = "SUBSCRIBERS" | "TEST";
 
 export function CampaignSection({
   campaignId,
@@ -34,21 +39,71 @@ export function CampaignSection({
   defaultTargetAll = true,
   defaultTargetTags = "",
   lockedReason = null,
+  testRecipientCount = null,
 }: Props) {
+  const [target, setTarget] = useState<SendTarget>("SUBSCRIBERS");
   const [enabled, setEnabled] = useState(defaultEnabled);
   const [sendType, setSendType] = useState(defaultSendType);
 
+  // "테스트 계정" sends the saved content to the test list on save and leaves
+  // the campaign (below) untouched — see sendNewsletterTestFor in
+  // app/admin/(protected)/site/newsletter/manage/actions.ts.
+  const targetPicker = (
+    <div className="space-y-2">
+      <p className="text-sm font-semibold text-foreground">발송 대상</p>
+      <div className="flex flex-wrap gap-4 text-sm text-foreground">
+        <label className="flex items-center gap-2">
+          <input
+            type="radio"
+            name="send_target"
+            value="SUBSCRIBERS"
+            checked={target === "SUBSCRIBERS"}
+            onChange={() => setTarget("SUBSCRIBERS")}
+            className="size-4"
+          />
+          구독자
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="radio"
+            name="send_target"
+            value="TEST"
+            checked={target === "TEST"}
+            onChange={() => setTarget("TEST")}
+            className="size-4"
+          />
+          테스트 계정{testRecipientCount === null ? "" : ` (활성 ${testRecipientCount}명)`}
+        </label>
+      </div>
+      {target === "TEST" && (
+        <p className="text-sm text-muted-foreground rounded-md bg-muted/50 px-3 py-2">
+          저장하면 내용을 저장한 뒤 활성 테스트 계정에게만 즉시 테스트 메일을 보냅니다. 제목 앞에 [테스트]가 붙고,
+          구독자 발송·예약 설정·발행호수·통계에는 영향이 없습니다. 테스트 계정은 구독자관리에서 관리합니다.
+          {testRecipientCount === 0 && " 현재 활성 테스트 계정이 없습니다."}
+        </p>
+      )}
+    </div>
+  );
+
+  if (target === "TEST") {
+    return <div className="rounded-xl border border-border bg-white p-6 space-y-6">{targetPicker}</div>;
+  }
+
   if (lockedReason) {
     return (
-      <div className="rounded-xl border border-border bg-white p-6 space-y-2">
-        <p className="text-sm font-semibold text-foreground">발송 예약 설정</p>
-        <p className="text-sm text-muted-foreground rounded-md bg-muted/50 px-3 py-2">{lockedReason}</p>
+      <div className="rounded-xl border border-border bg-white p-6 space-y-6">
+        {targetPicker}
+        <div className="space-y-2 border-t border-border pt-6">
+          <p className="text-sm font-semibold text-foreground">발송 예약 설정</p>
+          <p className="text-sm text-muted-foreground rounded-md bg-muted/50 px-3 py-2">{lockedReason}</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="rounded-xl border border-border bg-white p-6 space-y-6">
+      {targetPicker}
       {campaignId && <input type="hidden" name="campaign_id" value={campaignId} />}
 
       <label className="flex items-center gap-2 text-sm font-semibold text-foreground">

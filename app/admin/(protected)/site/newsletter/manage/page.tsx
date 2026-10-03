@@ -9,18 +9,18 @@ import { ImageUpload } from "@/components/admin/newsletter/ImageUpload";
 import { BlockEditor } from "@/components/admin/newsletter/BlockEditor";
 import { CampaignSection } from "@/components/admin/newsletter/CampaignSection";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getColumnBoardPosts, getNewsletterTemplates } from "@/lib/newsletter/queries";
+import { getActiveTestRecipientCount, getColumnBoardPosts, getNewsletterTemplates } from "@/lib/newsletter/queries";
 import { saveNewsletterCampaign } from "./actions";
 
 type Props = {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string }>;
 };
 
 export default async function AdminNewsletterManageNewPage({ searchParams }: Props) {
-  const { error } = await searchParams;
+  const { error, notice } = await searchParams;
 
   const supabase = createAdminClient();
-  const [{ data: banners }, boardPosts, templates] = await Promise.all([
+  const [{ data: banners }, boardPosts, templates, testRecipientCount] = await Promise.all([
     supabase
       .from("newsletter_ad_banners")
       .select("id, name")
@@ -28,6 +28,7 @@ export default async function AdminNewsletterManageNewPage({ searchParams }: Pro
       .order("created_at", { ascending: false }),
     getColumnBoardPosts(),
     getNewsletterTemplates(),
+    getActiveTestRecipientCount(),
   ]);
 
   return (
@@ -114,8 +115,9 @@ export default async function AdminNewsletterManageNewPage({ searchParams }: Pro
           />
         </div>
 
-        <CampaignSection />
+        <CampaignSection testRecipientCount={testRecipientCount} />
 
+        {notice && <p className="text-sm text-primary">{notice}</p>}
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <button
