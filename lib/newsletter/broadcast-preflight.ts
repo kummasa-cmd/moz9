@@ -97,12 +97,26 @@ export function isEligibleGapTooLarge(gap: number, eligible: number): boolean {
   return gap > ELIGIBLE_GAP_BLOCK_COUNT || gap / Math.max(eligible, 1) > ELIGIBLE_GAP_BLOCK_RATIO;
 }
 
-export function evaluateBroadcastPreflight(input: {
-  subscribers: PreflightSubscriber[];
-  suppressions: PreflightSuppression[];
-  segmentContacts: SegmentContact[];
-  accountSuppressions: PreflightAccountSuppression[];
-}): PreflightResult {
+// "all_subscribers" (every real campaign): the segment must mirror Supabase,
+// so eligible subscribers missing from it count as a gap.
+// "segment_only" (B2 test segment, broadcast-test-run.ts only): the segment
+// is deliberately a handful of addresses, so the eligible-gap checks are
+// skipped. Every check on who the Broadcast would reach — unknown, not
+// eligible, account-suppressed, unsynced opt-outs, read failures — still runs.
+export type PreflightScope = "all_subscribers" | "segment_only";
+
+export type PreflightOptions = { scope?: PreflightScope };
+
+export function evaluateBroadcastPreflight(
+  input: {
+    subscribers: PreflightSubscriber[];
+    suppressions: PreflightSuppression[];
+    segmentContacts: SegmentContact[];
+    accountSuppressions: PreflightAccountSuppression[];
+  },
+  options: PreflightOptions = {},
+): PreflightResult {
+  const checkEligibleGap = (options.scope ?? "all_subscribers") === "all_subscribers";
   const suppressedAt = new Map(input.suppressions.map((s) => [normalize(s.email), s.unsubscribed_at]));
   const byEmail = new Map(input.subscribers.map((s) => [normalize(s.email), s]));
   const isEligible = (s: PreflightSubscriber) => s.status === "SUBSCRIBED" && !suppressedAt.has(normalize(s.email));
@@ -154,13 +168,13 @@ export function evaluateBroadcastPreflight(input: {
   if (unknownButSubscribed.length) blocking.push(issue("RESEND_SUBSCRIBED_UNKNOWN", unknownButSubscribed));
   if (suppressedButSubscribed.length) blocking.push(issue("RESEND_SUPPRESSED_BUT_SUBSCRIBED", suppressedButSubscribed));
   if (notEligibleUnsynced.length) blocking.push(issue("NOT_ELIGIBLE_UNSYNCED", notEligibleUnsynced));
-  if (isEligibleGapTooLarge(gap, eligible)) {
+  if (checkEligibleGap && isEligibleGapTooLarge(gap, eligible)) {
     blocking.push(issue("ELIGIBLE_GAP_TOO_LARGE", [...new Set([...eligibleUnsynced, ...eligibleNotInSegment])]));
   }
 
   const warnings: PreflightIssue[] = [];
-  if (eligibleUnsynced.length) warnings.push(issue("ELIGIBLE_UNSYNCED", eligibleUnsynced));
-  if (eligibleNotInSegment.length) warnings.push(issue("ELIGIBLE_NOT_IN_SEGMENT", eligibleNotInSegment));
+  if (checkEligibleGap && eligibleUnsynced.length) warnings.push(issue("ELIGIBLE_UNSYNCED", eligibleUnsynced));
+  if (checkEligibleGap && eligibleNotInSegment.length) warnings.push(issue("ELIGIBLE_NOT_IN_SEGMENT", eligibleNotInSegment));
 
   return { ok: blocking.length === 0, blocking, warnings, eligible, segmentSubscribed: segmentSubscribed.length };
 }
@@ -269,6 +283,7 @@ export async function runBroadcastPreflight(
   db: SupabaseClient,
   client: PreflightClient,
   segmentId: string,
+  options: PreflightOptions = {},
 ): Promise<PreflightResult> {
   const [base, suppressions] = await Promise.allSettled([
     Promise.all([loadPreflightDbInputs(db), listSegmentContacts(client, segmentId)]),
@@ -287,5 +302,5 @@ export async function runBroadcastPreflight(
   if (base.status === "rejected" || suppressions.status === "rejected") return readFailed(failed);
 
   const [dbInputs, segmentContacts] = base.value;
-  return evaluateBroadcastPreflight({ ...dbInputs, segmentContacts, accountSuppressions: suppressions.value });
+  return evaluateBroadcastPreflight({ ...dbInputs, segmentContacts, accountSuppressions: suppressions.value }, options);
 }

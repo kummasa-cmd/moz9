@@ -13,7 +13,12 @@ import { buildEmailTemplate, chunk, getResendClient, personalizeEmail } from "./
 import { campaignStatusAfterRun, isCampaignDue, type DueCampaign } from "./campaign-due";
 import { kstDateString } from "./schedule-time";
 import { resolveDeliveryMode, selectCampaignDeliveryPath } from "./delivery-mode";
-import { sendClaimedCampaignViaBroadcast } from "./broadcast-sender";
+import {
+  sendClaimedCampaignViaBroadcast,
+  sendClaimedTestCampaignViaBroadcast,
+  type BroadcastCampaignDeps,
+} from "./broadcast-sender";
+import { checkBroadcastTestRun, isBroadcastTestCampaign, type BroadcastTestTarget } from "./broadcast-test-run";
 
 // Resend's batch endpoint accepts at most 100 emails per call.
 const SEND_BATCH_SIZE = 100;
@@ -33,6 +38,8 @@ export type ProcessCampaignDeps = {
   assignNewsletterIssueNumber: typeof assignNewsletterIssueNumber;
   getAdBannersByIds: typeof getAdBannersByIds;
   recordBoardPostNewsletterUsage: typeof recordBoardPostNewsletterUsage;
+  // Test-only overrides for the Broadcast sender; production uses its defaults.
+  broadcast?: Partial<BroadcastCampaignDeps>;
 };
 
 function resolveDeps(overrides: Partial<ProcessCampaignDeps> = {}): ProcessCampaignDeps {
@@ -44,6 +51,7 @@ function resolveDeps(overrides: Partial<ProcessCampaignDeps> = {}): ProcessCampa
     assignNewsletterIssueNumber: overrides.assignNewsletterIssueNumber ?? assignNewsletterIssueNumber,
     getAdBannersByIds: overrides.getAdBannersByIds ?? getAdBannersByIds,
     recordBoardPostNewsletterUsage: overrides.recordBoardPostNewsletterUsage ?? recordBoardPostNewsletterUsage,
+    broadcast: overrides.broadcast,
   };
 }
 
@@ -115,9 +123,18 @@ async function markDeliveriesFailed(db: AdminClient, ids: string[], message: str
   await db.from("newsletter_deliveries").update({ status: "FAILED", error_message: message }).in("id", ids);
 }
 
+// broadcastTest (B2) is passed only by scripts/newsletter/b2-campaign-broadcast.ts
+// — never by an admin action, cron or route (see broadcast-test-run.ts). It
+// sends this one campaign as a Broadcast to the verified test segment,
+// whatever NEWSLETTER_DELIVERY_MODE says; any failed check is an error, never
+// a legacy send.
 export async function processCampaign(
   campaignId: string,
-  opts: { trigger?: ProcessCampaignTrigger; deps?: Partial<ProcessCampaignDeps> } = {},
+  opts: {
+    trigger?: ProcessCampaignTrigger;
+    deps?: Partial<ProcessCampaignDeps>;
+    broadcastTest?: BroadcastTestTarget;
+  } = {},
 ): Promise<ProcessCampaignResult> {
   const trigger = opts.trigger ?? "schedule";
   const deps = resolveDeps(opts.deps);
@@ -126,7 +143,7 @@ export async function processCampaign(
 
   const { data: campaign } = await db
     .from("newsletter_campaigns")
-    .select("id, newsletter_id, send_type, target_all, target_tags, range_end, audience")
+    .select("id, newsletter_id, send_type, scheduled_at, target_all, target_tags, range_end, audience")
     .eq("id", campaignId)
     .maybeSingle();
 
@@ -142,6 +159,29 @@ export async function processCampaign(
 
   if (!newsletterConfig.resendApiKey || !newsletterConfig.senderEmail) {
     return { ok: false, error: "RESEND_API_KEY 또는 NEWSLETTER_SENDER_EMAIL이 설정되지 않았습니다." };
+  }
+
+  if (opts.broadcastTest) {
+    // Checked before the claim, so a rejected B2 run leaves the campaign as is.
+    const check = checkBroadcastTestRun(campaign, opts.broadcastTest);
+    if (!check.ok) return { ok: false, error: check.error };
+
+    if (!(await claimCampaign(db, campaign, trigger, now))) {
+      return { ok: false, skipped: true, error: "이미 발송 중이거나 발송 대기 상태가 아닌 캠페인입니다." };
+    }
+    try {
+      return await sendClaimedTestCampaignViaBroadcast(db, campaign, newsletter, now, opts.broadcastTest, deps.broadcast);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "발송 중 오류가 발생했습니다.";
+      await db.from("newsletter_campaigns").update({ status: "FAILED", last_error: message }).eq("id", campaignId);
+      return { ok: false, error: message };
+    }
+  }
+
+  // A campaign the B2 script made (and didn't get to send) is never sent by
+  // an ordinary run — that would reach the real segment / every subscriber.
+  if (isBroadcastTestCampaign(campaign)) {
+    return { ok: false, error: "B2 테스트 캠페인은 B2 스크립트로만 발송할 수 있습니다." };
   }
 
   // NEWSLETTER_DELIVERY_MODE (default legacy) picks the send path; see
@@ -160,7 +200,7 @@ export async function processCampaign(
 
   try {
     if (delivery.path === "broadcast") {
-      return await sendClaimedCampaignViaBroadcast(db, campaign, newsletter, now);
+      return await sendClaimedCampaignViaBroadcast(db, campaign, newsletter, now, deps.broadcast);
     }
     return await sendClaimedCampaign(deps, campaign, newsletter, now);
   } catch (err) {

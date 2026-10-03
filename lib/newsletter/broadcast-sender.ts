@@ -33,6 +33,12 @@ import {
   type PreflightResult,
   type PreflightClient,
 } from "./broadcast-preflight";
+import {
+  checkBroadcastTestPreflight,
+  checkBroadcastTestRun,
+  runBroadcastTestPreflight,
+  type BroadcastTestTarget,
+} from "./broadcast-test-run";
 import type { ProcessCampaignResult } from "./scheduler";
 
 // Broadcast send path for the regular newsletter (3단계). Only reached when
@@ -289,6 +295,8 @@ export type BroadcastNewsletter = {
 export type BroadcastCampaignDeps = {
   createClient: () => ResendBroadcastsClient & PreflightClient;
   runPreflight: (db: AdminClient, client: PreflightClient, segmentId: string) => Promise<PreflightResult>;
+  // B2 only: same checks minus the eligible-gap comparison (broadcast-test-run.ts).
+  runTestPreflight: (db: AdminClient, client: PreflightClient, segmentId: string) => Promise<PreflightResult>;
   loadTiming: (db: AdminClient, campaignId: string) => Promise<CampaignTiming>;
   getRecipientCount: () => Promise<number>;
   assignIssueNumber: (newsletterId: string) => Promise<number | null>;
@@ -310,6 +318,7 @@ async function loadCampaignTiming(db: AdminClient, campaignId: string): Promise<
 const defaultDeps: BroadcastCampaignDeps = {
   createClient: () => createBroadcastsClient(),
   runPreflight: (db, client, segmentId) => runBroadcastPreflight(db, client, segmentId),
+  runTestPreflight: (db, client, segmentId) => runBroadcastTestPreflight(db, client, segmentId),
   loadTiming: loadCampaignTiming,
   getRecipientCount: async () => (await getTargetSubscribers({ targetAll: true, targetTags: [] })).length,
   assignIssueNumber: assignNewsletterIssueNumber,
@@ -429,4 +438,73 @@ export async function sendClaimedCampaignViaBroadcast(
   await deps.recordUsage(getSourcePostIds((newsletter.blocks as ContentBlock[] | null) ?? []));
 
   return { ok: true, sent: estimate, recipients: estimate, failed: 0, broadcastId: result.broadcastId };
+}
+
+// B2 (broadcast-test-run.ts): the same claimed-campaign Broadcast run, sent
+// to the verified TEST segment only. Called by processCampaign only when the
+// B2 script passes { broadcastTest }. Differences from the function above:
+//   - segment: resolveBroadcastSegment("test") via checkBroadcastTestRun —
+//     the real segment is never resolved here;
+//   - preflight: segment-scoped (no eligible-gap check), and a block is an
+//     error (processCampaign marks the campaign FAILED) instead of a retry;
+//   - recipients: the test segment's subscribed Contacts (1..5), not Supabase;
+//   - no issue number and no board-post usage count.
+// Throws on any failure; nothing here falls back to the legacy sender or to
+// the real segment.
+export async function sendClaimedTestCampaignViaBroadcast(
+  db: AdminClient,
+  campaign: BroadcastCampaign & { target_all: boolean; target_tags: string[] | null; scheduled_at: string | null },
+  newsletter: BroadcastNewsletter,
+  now: Date,
+  target: BroadcastTestTarget,
+  overrides: Partial<BroadcastCampaignDeps> = {},
+): Promise<ProcessCampaignResult> {
+  const deps = { ...defaultDeps, ...overrides };
+
+  const run = checkBroadcastTestRun(campaign, target);
+  if (!run.ok) throw new Error(run.error);
+
+  const client = deps.createClient();
+
+  const audience = checkBroadcastTestPreflight(await deps.runTestPreflight(db, client, run.segmentId));
+  if (!audience.ok) throw new Error(audience.error);
+  const recipients = audience.recipients;
+
+  await db.from("newsletter_campaigns").update({ total_recipients: recipients }).eq("id", campaign.id);
+
+  const html = await deps.renderHtml(newsletter, null);
+
+  const result = await executeBroadcastRun(
+    {
+      campaignId: campaign.id,
+      newsletterId: newsletter.id,
+      runKey: broadcastRunKey(campaign.send_type, now),
+      segmentId: run.segmentId,
+      recipientEstimate: recipients,
+      content: { from: newsletterFromAddress(), subject: newsletter.subject, html },
+    },
+    { store: deps.createStore(db), client },
+  );
+
+  if (!result.ok) throw new Error(result.error);
+
+  await db
+    .from("newsletter_campaigns")
+    .update({
+      status: campaignStatusAfterRun({
+        sendType: campaign.send_type,
+        rangeEnd: campaign.range_end,
+        recipients,
+        sent: recipients,
+        now,
+      }),
+      sent_at: new Date().toISOString(),
+      last_sent_date: kstDateString(now),
+      total_sent: recipients,
+      total_failed: 0,
+      last_error: null,
+    })
+    .eq("id", campaign.id);
+
+  return { ok: true, sent: recipients, recipients, failed: 0, broadcastId: result.broadcastId };
 }
