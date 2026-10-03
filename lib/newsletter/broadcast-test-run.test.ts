@@ -592,6 +592,8 @@ describe("B2 option is reachable only from the B2 script", () => {
     "lib/newsletter/broadcast-sender.ts",
     "lib/newsletter/broadcast-test-run.ts",
     "scripts/newsletter/b2-campaign-broadcast.ts",
+    // Imports only the pure isBroadcastTestCampaign predicate (Stage 5 stats).
+    "lib/newsletter/campaign-stats.ts",
   ]);
 
   function walk(dir: string, out: string[] = []): string[] {
