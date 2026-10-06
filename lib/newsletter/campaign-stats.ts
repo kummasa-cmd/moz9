@@ -332,44 +332,58 @@ export function broadcastSummaryStats(input: {
   return summary.runs > 0 ? summary : null;
 }
 
-// A processed email.sent webhook row linked to a Broadcast run.
-export type BroadcastSentEventInput = {
+// One row of newsletter_daily_send_counts (migration 0033), as PostgREST
+// returns it: emails sent per UTC day, already aggregated in the database —
+// legacy per day, Broadcast per (run, day). See the migration for the rules
+// (window, PROCESSED email.sent only, distinct email_id, event time).
+export type DailySendCountRow = {
+  source: "legacy" | "broadcast";
   broadcast_send_id: string | null;
-  email_id: string | null;
-  event_created_at: string | null;
-  received_at: string;
+  send_date: string; // YYYY-MM-DD, UTC
+  sent_count: number | string; // bigint
 };
 
-// One timestamp per email sent on or after `since`, for the daily volume chart
-// ("emails sent that day"):
-//   legacy     newsletter_deliveries.sent_at — one row = one email (callers
-//              pass subscriber deliveries only, as before)
-//   broadcast  email.sent events, one per distinct email_id (a redelivered
-//              webhook is already deduplicated by svix_id; email_id guards the
-//              rest), timed by the provider's event time
+// Emails sent per day ("YYYY-MM-DD" → count) for the daily volume chart:
+//   legacy     subscriber delivery rows (the function already leaves out
+//              promotional ones)
+//   broadcast  only runs of analytics campaigns — B2 test campaigns,
+//              unknown runs and runs of campaigns not passed in are dropped
+//              here, with the same predicate as the rest of the page
 // The two can be added: legacy mail never carries a broadcast id (its events
 // are IGNORED and unlinked) and Broadcast runs write no delivery rows, so no
-// email is in both. Events of test or non-analytics campaigns are dropped.
-export function dailySendTimestamps(input: {
-  legacySentAt: (string | null)[];
-  broadcastSentEvents: BroadcastSentEventInput[];
+// email is in both.
+export function dailySendCounts(input: {
+  rows: DailySendCountRow[];
   broadcastRuns: { id: string; campaign_id: string }[];
   campaigns: { id: string; send_type: string; scheduled_at: string | null }[];
-  since: Date;
-}): string[] {
-  const inRange = (ts: string | null): ts is string => !!ts && new Date(ts).getTime() >= input.since.getTime();
-
+}): Map<string, number> {
   const included = new Set(input.campaigns.filter(isAnalyticsCampaign).map((c) => c.id));
   const campaignBySendId = new Map(input.broadcastRuns.map((r) => [r.id, r.campaign_id]));
 
-  const broadcast = new Map<string, string>();
-  for (const e of input.broadcastSentEvents) {
-    if (!e.broadcast_send_id || !e.email_id || broadcast.has(e.email_id)) continue;
-    const campaignId = campaignBySendId.get(e.broadcast_send_id);
-    if (!campaignId || !included.has(campaignId)) continue;
-    const at = e.event_created_at ?? e.received_at;
-    if (inRange(at)) broadcast.set(e.email_id, at);
+  const counts = new Map<string, number>();
+  for (const row of input.rows) {
+    if (row.source === "broadcast") {
+      const campaignId = row.broadcast_send_id ? campaignBySendId.get(row.broadcast_send_id) : undefined;
+      if (!campaignId || !included.has(campaignId)) continue;
+    } else if (row.source !== "legacy") {
+      continue;
+    }
+    const n = Number(row.sent_count);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    counts.set(row.send_date, (counts.get(row.send_date) ?? 0) + n);
   }
+  return counts;
+}
 
-  return [...input.legacySentAt.filter(inRange), ...broadcast.values()];
+// The chart's day keys, oldest first: the last `days` days ending today, as
+// "YYYY-MM-DD" from the ISO (UTC) string — how the page has always keyed
+// its buckets.
+export function trendDayKeys(days: number, now: Date = new Date()): string[] {
+  const keys: string[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    keys.push(d.toISOString().slice(0, 10));
+  }
+  return keys;
 }

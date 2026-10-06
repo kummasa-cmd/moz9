@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   broadcastCampaignStats,
   broadcastSummaryStats,
-  dailySendTimestamps,
+  dailySendCounts,
   buildCampaignPerformanceRows,
   isAnalyticsCampaign,
   broadcastRunOutcome,
@@ -11,8 +11,9 @@ import {
   legacyAggregateStats,
   legacyCampaignStats,
   safeRatio,
+  trendDayKeys,
   type BroadcastRunInput,
-  type BroadcastSentEventInput,
+  type DailySendCountRow,
   type BroadcastStatsRow,
   type LegacyDeliveryInput,
 } from "./campaign-stats";
@@ -473,8 +474,7 @@ describe("broadcastSummaryStats", () => {
   });
 });
 
-describe("dailySendTimestamps (날짜별 발송량)", () => {
-  const since = new Date("2026-09-04T00:00:00Z");
+describe("dailySendCounts (날짜별 발송량, DB 집계 행)", () => {
   const campaigns = [
     { id: "B", send_type: "IMMEDIATE", scheduled_at: null },
     { id: "M", send_type: "RECURRING", scheduled_at: null },
@@ -485,70 +485,53 @@ describe("dailySendTimestamps (날짜별 발송량)", () => {
     { id: "m1", campaign_id: "M" },
     { id: "t1", campaign_id: "T" },
   ];
-  const sent = (sendId: string, emailId: string, at: string): BroadcastSentEventInput => ({ broadcast_send_id: sendId, email_id: emailId, event_created_at: at, received_at: at });
-  const day = (ts: string[]) => ts.map((t) => t.slice(0, 10)).sort();
-  const base = { broadcastRuns: runs, campaigns, since };
+  const legacy = (date: string, n: number | string): DailySendCountRow => ({ source: "legacy", broadcast_send_id: null, send_date: date, sent_count: n });
+  const broadcast = (sendId: string | null, date: string, n: number | string): DailySendCountRow => ({ source: "broadcast", broadcast_send_id: sendId, send_date: date, sent_count: n });
+  const counts = (rows: DailySendCountRow[]) => Object.fromEntries(dailySendCounts({ rows, broadcastRuns: runs, campaigns }));
 
   it("legacy only", () => {
-    assert.deepEqual(day(dailySendTimestamps({ ...base, legacySentAt: ["2026-10-01T00:34:00Z", "2026-10-01T00:34:01Z", null], broadcastSentEvents: [] })), ["2026-10-01", "2026-10-01"]);
+    assert.deepEqual(counts([legacy("2026-10-01", 97), legacy("2026-09-29", 90)]), { "2026-10-01": 97, "2026-09-29": 90 });
   });
 
-  it("Broadcast only — one per distinct email_id, duplicates of the same email counted once", () => {
-    const ts = dailySendTimestamps({
-      ...base,
-      legacySentAt: [],
-      broadcastSentEvents: [sent("b1", "e1", "2026-10-05T00:30:00Z"), sent("b1", "e1", "2026-10-05T00:30:02Z"), sent("b1", "e2", "2026-10-05T00:30:01Z")],
-    });
-    assert.deepEqual(day(ts), ["2026-10-05", "2026-10-05"]);
+  it("first real Broadcast: the day counts emails sent (107), not delivered", () => {
+    assert.deepEqual(counts([broadcast("b1", "2026-10-06", 107)]), { "2026-10-06": 107 });
   });
 
-  it("same day legacy + Broadcast add up; different days stay apart", () => {
-    const ts = dailySendTimestamps({
-      ...base,
-      legacySentAt: ["2026-10-05T00:30:00Z", "2026-10-04T00:30:00Z"],
-      broadcastSentEvents: [sent("b1", "e1", "2026-10-05T00:31:00Z")],
+  it("same day legacy + Broadcast add up (50 + 108 = 158); different days stay apart", () => {
+    assert.deepEqual(counts([legacy("2026-10-05", 50), broadcast("b1", "2026-10-05", 108), legacy("2026-10-04", 3)]), {
+      "2026-10-05": 158,
+      "2026-10-04": 3,
     });
-    assert.deepEqual(day(ts), ["2026-10-04", "2026-10-05", "2026-10-05"]);
-  });
-
-  it("B2 test campaign events and unlinked / unknown runs are left out", () => {
-    const ts = dailySendTimestamps({
-      ...base,
-      legacySentAt: [],
-      broadcastSentEvents: [
-        sent("t1", "e-test", "2026-10-03T08:50:19Z"),
-        sent("zz", "e-unknown", "2026-10-03T08:50:19Z"),
-        { broadcast_send_id: null, email_id: "e-legacy", event_created_at: "2026-10-03T00:00:00Z", received_at: "2026-10-03T00:00:00Z" },
-      ],
-    });
-    assert.deepEqual(ts, []);
   });
 
   it("a mixed campaign's legacy day and Broadcast day are both counted, each once", () => {
-    const ts = dailySendTimestamps({
-      ...base,
-      legacySentAt: ["2026-10-01T00:00:00Z"], // M's legacy run (delivery row)
-      broadcastSentEvents: [sent("m1", "e1", "2026-10-02T00:00:00Z")], // M's Broadcast run
-    });
-    assert.deepEqual(day(ts), ["2026-10-01", "2026-10-02"]);
+    assert.deepEqual(counts([legacy("2026-10-01", 1), broadcast("m1", "2026-10-02", 1)]), { "2026-10-01": 1, "2026-10-02": 1 });
   });
 
-  it("anything before the 30-day window is excluded (legacy and Broadcast)", () => {
-    const ts = dailySendTimestamps({
-      ...base,
-      legacySentAt: ["2026-09-03T23:59:59Z", "2026-09-04T00:00:00Z"],
-      broadcastSentEvents: [sent("b1", "old", "2026-09-01T00:00:00Z"), sent("b1", "new", "2026-09-10T00:00:00Z")],
-    });
-    assert.deepEqual(day(ts), ["2026-09-04", "2026-09-10"]);
+  it("B2 test campaign runs, unknown runs and unlinked rows are left out", () => {
+    assert.deepEqual(counts([broadcast("t1", "2026-10-03", 1), broadcast("zz", "2026-10-03", 5), broadcast(null, "2026-10-03", 7)]), {});
   });
 
-  it("falls back to received_at when the provider time is missing", () => {
-    const ts = dailySendTimestamps({ ...base, legacySentAt: [], broadcastSentEvents: [{ broadcast_send_id: "b1", email_id: "e1", event_created_at: null, received_at: "2026-10-06T01:00:00Z" }] });
-    assert.deepEqual(ts, ["2026-10-06T01:00:00Z"]);
+  it("runs of campaigns not passed in (promo, unsent) are left out", () => {
+    const rows = [broadcast("b1", "2026-10-06", 10)];
+    assert.deepEqual(Object.fromEntries(dailySendCounts({ rows, broadcastRuns: runs, campaigns: [] })), {});
   });
 
-  it("legacy timestamps pass through unchanged (chart unchanged without Broadcast)", () => {
-    const legacy = ["2026-10-01T00:34:07Z", "2026-09-29T00:55:00Z"];
-    assert.deepEqual(dailySendTimestamps({ ...base, legacySentAt: legacy, broadcastSentEvents: [] }), legacy);
+  it("bigint counts that arrive as strings are added as numbers", () => {
+    assert.deepEqual(counts([broadcast("b1", "2026-10-06", "60"), broadcast("b1", "2026-10-06", "48")]), { "2026-10-06": 108 });
+  });
+
+  it("ignores unknown sources and empty / invalid counts", () => {
+    const odd = { source: "other", broadcast_send_id: null, send_date: "2026-10-06", sent_count: 9 } as unknown as DailySendCountRow;
+    assert.deepEqual(counts([odd, legacy("2026-10-06", 0), legacy("2026-10-06", "x")]), {});
+  });
+});
+
+describe("trendDayKeys", () => {
+  it("the last N UTC days ending today, oldest first", () => {
+    const keys = trendDayKeys(30, new Date("2026-10-06T00:13:14Z"));
+    assert.equal(keys.length, 30);
+    assert.equal(keys[0], "2026-09-07");
+    assert.equal(keys[29], "2026-10-06");
   });
 });

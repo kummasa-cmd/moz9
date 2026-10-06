@@ -16,10 +16,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   broadcastSummaryStats,
   buildCampaignPerformanceRows,
-  dailySendTimestamps,
+  dailySendCounts,
   isAnalyticsCampaign,
-  type BroadcastSentEventInput,
+  trendDayKeys,
   type BroadcastStatsRow,
+  type DailySendCountRow,
   type DeliveryPath,
 } from "@/lib/newsletter/campaign-stats";
 import { SUBSCRIBER_SOURCE_LABEL } from "../labels";
@@ -29,14 +30,7 @@ const RECENT_CAMPAIGN_LIMIT = 10;
 const NO_BROADCAST_HINT = "아직 Broadcast 발송 없음";
 
 function bucketByDay(dates: (string | null)[], days: number): { date: string; count: number }[] {
-  const buckets = new Map<string, number>();
-  const today = new Date();
-
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    buckets.set(d.toISOString().slice(0, 10), 0);
-  }
+  const buckets = new Map(trendDayKeys(days).map((key) => [key, 0]));
 
   for (const raw of dates) {
     if (!raw) continue;
@@ -45,6 +39,11 @@ function bucketByDay(dates: (string | null)[], days: number): { date: string; co
   }
 
   return [...buckets.entries()].map(([date, count]) => ({ date, count }));
+}
+
+// Same day keys as bucketByDay, for counts the database already aggregated.
+function seriesByDay(counts: Map<string, number>, days: number): { date: string; count: number }[] {
+  return trendDayKeys(days).map((date) => ({ date, count: counts.get(date) ?? 0 }));
 }
 
 function formatPercent(numerator: number, denominator: number): string {
@@ -81,9 +80,8 @@ export default async function AdminNewsletterAnalyticsPage() {
     { data: subscribersBySource },
     { data: topNewsletters },
     { data: recentCampaigns },
-    { data: sentDates },
+    { data: dailySendRows, error: dailySendError },
     { data: subscribedDates },
-    { data: broadcastSentEvents },
   ] = await Promise.all([
     supabase
       .from("newsletter_subscribers")
@@ -134,23 +132,15 @@ export default async function AdminNewsletterAnalyticsPage() {
       .eq("audience", "SUBSCRIBERS")
       .gt("total_sent", 0)
       .order("sent_at", { ascending: false }),
-    supabase
-      .from("newsletter_deliveries")
-      .select("sent_at")
-      .not("sent_at", "is", null)
-      .is("prospect_id", null)
-      .gte("sent_at", sinceIso),
+    // Emails sent per day in the trend window, counted in the database
+    // (migration 0033): legacy per day, Broadcast per run and day — a few
+    // dozen rows however many emails went out, so PostgREST's row cap can't
+    // truncate the chart. dailySendCounts keeps analytics campaigns only.
+    supabase.rpc("newsletter_daily_send_counts", { p_since: sinceIso }),
     supabase.from("newsletter_subscribers").select("subscribed_at").gte("subscribed_at", sinceIso),
-    // Broadcast emails sent in the trend window: processed email.sent events
-    // linked to a run (dailySendTimestamps keeps analytics campaigns only).
-    supabase
-      .from("newsletter_webhook_events")
-      .select("broadcast_send_id, email_id, event_created_at, received_at")
-      .eq("event_type", "email.sent")
-      .eq("status", "PROCESSED")
-      .not("broadcast_send_id", "is", null)
-      .gte("received_at", sinceIso),
   ]);
+
+  if (dailySendError) console.error("[newsletter] daily send counts:", dailySendError.message);
 
   const sourceCounts = new Map<string, number>();
   for (const row of subscribersBySource ?? []) {
@@ -212,13 +202,11 @@ export default async function AdminNewsletterAnalyticsPage() {
   });
 
   // Emails sent per day: legacy delivery rows + Broadcast email.sent events.
-  const sendTrend = bucketByDay(
-    dailySendTimestamps({
-      legacySentAt: (sentDates ?? []).map((d) => d.sent_at),
-      broadcastSentEvents: (broadcastSentEvents ?? []) as BroadcastSentEventInput[],
+  const sendTrend = seriesByDay(
+    dailySendCounts({
+      rows: (dailySendRows ?? []) as DailySendCountRow[],
       broadcastRuns: campaignRuns ?? [],
       campaigns: subscriberCampaigns,
-      since,
     }),
     TREND_DAYS,
   );
