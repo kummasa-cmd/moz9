@@ -7,11 +7,12 @@ import {
   createAdminSession,
   clearAdminSession,
 } from "@/lib/admin-auth";
+import { safeAdminRedirect } from "@/lib/admin-session/redirect";
 
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
-  const redirectTo = String(formData.get("redirect") || "/admin");
+  const redirectTo = safeAdminRedirect(formData.get("redirect"));
 
   const supabase = createAdminClient();
   const { data: admin } = await supabase

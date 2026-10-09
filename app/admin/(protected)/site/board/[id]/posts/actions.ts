@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function createBoardPost(boardId: string, formData: FormData) {
+  await requireAdmin();
   const title = String(formData.get("title") ?? "").trim();
   const content = String(formData.get("content") ?? "");
   const status = String(formData.get("status") ?? "게시중");
@@ -39,6 +41,7 @@ export async function createBoardPost(boardId: string, formData: FormData) {
 }
 
 export async function updateBoardPost(boardId: string, postId: string, formData: FormData) {
+  await requireAdmin();
   const title = String(formData.get("title") ?? "").trim();
   const content = String(formData.get("content") ?? "");
   const status = String(formData.get("status") ?? "게시중");
@@ -66,6 +69,7 @@ export async function updateBoardPost(boardId: string, postId: string, formData:
 }
 
 export async function deleteBoardPost(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const boardId = String(formData.get("board_id") ?? "");
 
@@ -77,6 +81,7 @@ export async function deleteBoardPost(formData: FormData) {
 }
 
 export async function deleteBoardPosts(formData: FormData) {
+  await requireAdmin();
   const ids = formData.getAll("ids").map(String).filter(Boolean);
   const boardId = String(formData.get("board_id") ?? "");
   if (ids.length === 0) return;

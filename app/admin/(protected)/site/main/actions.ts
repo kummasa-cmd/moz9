@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function updateSiteSettings(formData: FormData) {
+  await requireAdmin();
   const supabase = createAdminClient();
   const { error } = await supabase
     .from("site_settings")

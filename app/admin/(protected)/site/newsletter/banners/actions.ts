@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-guard";
 
 function bannerFields(formData: FormData) {
   return {
@@ -17,6 +18,7 @@ function bannerFields(formData: FormData) {
 }
 
 export async function createBanner(formData: FormData) {
+  await requireAdmin();
   const fields = bannerFields(formData);
 
   if (!fields.image_url) {
@@ -35,6 +37,7 @@ export async function createBanner(formData: FormData) {
 }
 
 export async function updateBanner(id: string, formData: FormData) {
+  await requireAdmin();
   const fields = bannerFields(formData);
 
   if (!fields.image_url) {
@@ -53,6 +56,7 @@ export async function updateBanner(id: string, formData: FormData) {
 }
 
 export async function deleteBanner(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
 
   const supabase = createAdminClient();
@@ -62,6 +66,7 @@ export async function deleteBanner(formData: FormData) {
 }
 
 export async function deleteBanners(formData: FormData) {
+  await requireAdmin();
   const ids = formData.getAll("ids").map(String).filter(Boolean);
   if (ids.length === 0) return;
 

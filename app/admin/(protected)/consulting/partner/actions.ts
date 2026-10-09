@@ -5,8 +5,10 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifySubmitterReply } from "@/lib/mail";
 import { PARTNER_POST_STATUSES } from "./types";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function replyPartnerPost(id: string, formData: FormData) {
+  await requireAdmin();
   const content = String(formData.get("content") ?? "").trim();
   const page = String(formData.get("page") ?? "1");
   const limit = String(formData.get("limit") ?? "10");
@@ -63,6 +65,7 @@ export async function replyPartnerPost(id: string, formData: FormData) {
 }
 
 export async function updatePartnerPostStatus(id: string, formData: FormData) {
+  await requireAdmin();
   const status = String(formData.get("status") ?? "");
   const page = String(formData.get("page") ?? "1");
   const limit = String(formData.get("limit") ?? "10");
@@ -81,6 +84,7 @@ export async function updatePartnerPostStatus(id: string, formData: FormData) {
 }
 
 export async function updatePartnerComment(commentId: string, formData: FormData) {
+  await requireAdmin();
   const content = String(formData.get("content") ?? "").trim();
   const page = String(formData.get("page") ?? "1");
   const limit = String(formData.get("limit") ?? "10");
@@ -111,6 +115,7 @@ export async function updatePartnerComment(commentId: string, formData: FormData
 }
 
 export async function deletePartnerComment(formData: FormData) {
+  await requireAdmin();
   const commentId = String(formData.get("comment_id") ?? "");
   const page = String(formData.get("page") ?? "1");
   const limit = String(formData.get("limit") ?? "10");

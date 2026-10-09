@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function createProduct(formData: FormData) {
+  await requireAdmin();
   const name = String(formData.get("name") ?? "");
   const type = String(formData.get("type") ?? "패키지");
   const setup_fee = String(formData.get("setupFee") ?? "") || null;

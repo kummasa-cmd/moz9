@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function createMember(formData: FormData) {
+  await requireAdmin();
   const name = String(formData.get("name") ?? "");
   const nickname = String(formData.get("nickname") ?? "") || null;
   const email = String(formData.get("email") ?? "");
@@ -84,6 +86,7 @@ export async function createMember(formData: FormData) {
 }
 
 export async function updateMember(id: string, formData: FormData) {
+  await requireAdmin();
   const name = String(formData.get("name") ?? "");
   const nickname = String(formData.get("nickname") ?? "") || null;
   const email = String(formData.get("email") ?? "");
@@ -174,6 +177,7 @@ export async function updateMember(id: string, formData: FormData) {
 }
 
 export async function deleteMember(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
 
   const supabase = createAdminClient();
@@ -194,6 +198,7 @@ export async function deleteMember(formData: FormData) {
 }
 
 export async function deleteMembers(formData: FormData) {
+  await requireAdmin();
   const ids = formData.getAll("ids").map(String).filter(Boolean);
   if (ids.length === 0) return;
 

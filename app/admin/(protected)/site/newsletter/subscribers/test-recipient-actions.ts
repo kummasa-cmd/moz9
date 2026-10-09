@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeTestEmail } from "@/lib/newsletter/test-send";
+import { requireAdmin } from "@/lib/admin-guard";
 
 // Test recipients (newsletter_test_recipients, 0032). A separate list from
 // newsletter_subscribers: nothing here touches subscribers, suppressions or
@@ -16,6 +17,7 @@ function back(params: Record<string, string>): never {
 }
 
 export async function addTestRecipient(formData: FormData) {
+  await requireAdmin();
   const email = normalizeTestEmail(String(formData.get("email") ?? ""));
   const name = String(formData.get("name") ?? "").trim() || null;
   const memo = String(formData.get("memo") ?? "").trim() || null;
@@ -29,6 +31,7 @@ export async function addTestRecipient(formData: FormData) {
 }
 
 export async function setTestRecipientActive(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const active = formData.get("active") === "true";
   if (!id) back({ test_error: "대상을 찾을 수 없습니다." });
@@ -41,6 +44,7 @@ export async function setTestRecipientActive(formData: FormData) {
 }
 
 export async function deleteTestRecipient(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) back({ test_error: "대상을 찾을 수 없습니다." });
 

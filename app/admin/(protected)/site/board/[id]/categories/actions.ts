@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function createCategory(boardId: string, formData: FormData) {
+  await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   const sort_order = parseInt(String(formData.get("sort_order") ?? "0"), 10) || 0;
 
@@ -25,6 +27,7 @@ export async function createCategory(boardId: string, formData: FormData) {
 }
 
 export async function updateCategory(boardId: string, catId: string, formData: FormData) {
+  await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   const sort_order = parseInt(String(formData.get("sort_order") ?? "0"), 10) || 0;
 
@@ -47,6 +50,7 @@ export async function updateCategory(boardId: string, catId: string, formData: F
 }
 
 export async function deleteCategory(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const boardId = String(formData.get("board_id") ?? "");
 

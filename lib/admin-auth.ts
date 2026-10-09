@@ -1,12 +1,17 @@
 import { cookies } from "next/headers";
-import { SignJWT, jwtVerify } from "jose";
+import { SignJWT } from "jose";
 import bcrypt from "bcryptjs";
+import { legacyCookiePolicy } from "@/lib/admin-session/cookie";
+import { legacyAdminSessionKey, verifyLegacyAdminToken } from "@/lib/admin-session/token";
 
-const ADMIN_COOKIE = "admin-token";
+// Session format v1 (unchanged token format, see lib/admin-session/token.ts).
+// Stage 6-D2 hardening: no hard-coded fallback secret (a missing key now
+// fails closed) and the verifier accepts HS256 only. The switch to the
+// dedicated-secret v2 format is a separate, approved step
+// (docs/sns-lab-admin-session.md).
 
-function getSecret() {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "admin-secret-fallback";
-  return new TextEncoder().encode(key);
+function getSecret(): Uint8Array | null {
+  return legacyAdminSessionKey(process.env);
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -21,35 +26,27 @@ export async function verifyPassword(
 }
 
 export async function createAdminSession(adminId: string) {
+  const secret = getSecret();
+  if (!secret) throw new Error("Admin session signing key is not configured");
+
   const token = await new SignJWT({ sub: adminId })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("24h")
-    .sign(getSecret());
+    .sign(secret);
 
+  const { name, options } = legacyCookiePolicy(process.env.NODE_ENV);
   const cookieStore = await cookies();
-  cookieStore.set(ADMIN_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24,
-  });
+  cookieStore.set(name, token, options);
 }
 
 export async function getAdminSession(): Promise<string | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get(ADMIN_COOKIE)?.value;
-  if (!token) return null;
-
-  try {
-    const { payload } = await jwtVerify(token, getSecret());
-    return (payload.sub as string) ?? null;
-  } catch {
-    return null;
-  }
+  const token = cookieStore.get(legacyCookiePolicy(process.env.NODE_ENV).name)?.value;
+  const result = await verifyLegacyAdminToken(token, getSecret());
+  return result.ok ? result.adminId : null;
 }
 
 export async function clearAdminSession() {
   const cookieStore = await cookies();
-  cookieStore.delete(ADMIN_COOKIE);
+  cookieStore.delete(legacyCookiePolicy(process.env.NODE_ENV).name);
 }

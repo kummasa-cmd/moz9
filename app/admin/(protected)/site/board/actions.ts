@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function createBoard(formData: FormData) {
+  await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   const slug = String(formData.get("slug") ?? "").trim();
   const type = String(formData.get("type") ?? "일반");
@@ -44,6 +46,7 @@ export async function createBoard(formData: FormData) {
 }
 
 export async function updateBoard(id: string, formData: FormData) {
+  await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   const slug = String(formData.get("slug") ?? "").trim();
   const type = String(formData.get("type") ?? "일반");
@@ -76,6 +79,7 @@ export async function updateBoard(id: string, formData: FormData) {
 }
 
 export async function deleteBoard(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const supabase = createAdminClient();
   await supabase.from("boards").delete().eq("id", id);

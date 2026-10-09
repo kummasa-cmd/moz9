@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifySubmitterReply } from "@/lib/mail";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function replyConsultation(id: string, formData: FormData) {
+  await requireAdmin();
   const answer = String(formData.get("answer") ?? "").trim();
   const page = String(formData.get("page") ?? "1");
   const limit = String(formData.get("limit") ?? "10");

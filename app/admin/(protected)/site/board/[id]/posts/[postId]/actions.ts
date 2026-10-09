@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function addComment(boardId: string, postId: string, formData: FormData) {
+  await requireAdmin();
   const author_name = String(formData.get("author_name") ?? "").trim() || "관리자";
   const content = String(formData.get("content") ?? "").trim();
   const parent_id = String(formData.get("parent_id") ?? "") || null;
@@ -22,6 +24,7 @@ export async function addComment(boardId: string, postId: string, formData: Form
 }
 
 export async function deleteComment(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const boardId = String(formData.get("board_id") ?? "");
   const postId = String(formData.get("post_id") ?? "");

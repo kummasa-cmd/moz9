@@ -11,6 +11,7 @@ import {
   type CampaignSaveResult,
 } from "@/lib/newsletter/campaign-save";
 import type { ContentBlock } from "@/lib/newsletter/blocks/types";
+import { requireAdmin } from "@/lib/admin-guard";
 
 function parseBlocks(raw: FormDataEntryValue | null): ContentBlock[] {
   if (!raw) return [];
@@ -39,6 +40,7 @@ function slugify(input: string): string {
 // newsletter usage (board_posts.newsletter_published), since a promo send
 // isn't "this post appeared in the newsletter" for visibility purposes.
 export async function savePromoNewsletter(id: string | null, formData: FormData) {
+  await requireAdmin();
   const title = String(formData.get("title") ?? "");
   const subject = String(formData.get("subject") ?? "") || title;
   const preheader = String(formData.get("preheader") ?? "") || null;

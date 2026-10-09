@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function createPortfolioItem(formData: FormData) {
+  await requireAdmin();
   const title = String(formData.get("title") ?? "");
   const category = String(formData.get("category") ?? "홈페이지 제작");
   const status = String(formData.get("status") ?? "공개");
@@ -26,6 +28,7 @@ export async function createPortfolioItem(formData: FormData) {
 }
 
 export async function updatePortfolioItem(id: string, formData: FormData) {
+  await requireAdmin();
   const title = String(formData.get("title") ?? "");
   const category = String(formData.get("category") ?? "홈페이지 제작");
   const status = String(formData.get("status") ?? "공개");
@@ -48,6 +51,7 @@ export async function updatePortfolioItem(id: string, formData: FormData) {
 }
 
 export async function deletePortfolioItem(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
 
   const supabase = createAdminClient();

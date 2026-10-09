@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function replyInquiry(id: string, formData: FormData) {
+  await requireAdmin();
   const answer = String(formData.get("answer") ?? "");
 
   const supabase = createAdminClient();

@@ -15,6 +15,7 @@ import {
   saveCampaignSchedule,
   type CampaignSaveResult,
 } from "@/lib/newsletter/campaign-save";
+import { requireAdmin } from "@/lib/admin-guard";
 
 function parseBlocks(raw: FormDataEntryValue | null): ContentBlock[] {
   if (!raw) return [];
@@ -63,6 +64,7 @@ function slugify(input: string): string {
 }
 
 export async function saveNewsletterCampaign(id: string | null, formData: FormData) {
+  await requireAdmin();
   const title = String(formData.get("title") ?? "");
   const subject = String(formData.get("subject") ?? "") || title;
   const preheader = String(formData.get("preheader") ?? "") || null;

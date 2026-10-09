@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export type PartnerMemberResult = {
   id: string;
@@ -12,6 +13,7 @@ export type PartnerMemberResult = {
 };
 
 export async function searchPartnerMembers(query: string): Promise<PartnerMemberResult[]> {
+  await requireAdmin();
   const q = query.trim();
   if (!q) return [];
 
@@ -45,6 +47,7 @@ function readVendorFields(formData: FormData) {
 }
 
 export async function createVendor(formData: FormData) {
+  await requireAdmin();
   const fields = readVendorFields(formData);
 
   if (!fields.manager_member_id) {
@@ -67,6 +70,7 @@ export async function createVendor(formData: FormData) {
 }
 
 export async function updateVendor(id: string, formData: FormData) {
+  await requireAdmin();
   const fields = readVendorFields(formData);
 
   if (!fields.manager_member_id) {
@@ -92,6 +96,7 @@ export async function updateVendor(id: string, formData: FormData) {
 }
 
 export async function deleteVendor(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
 
   const supabase = createAdminClient();

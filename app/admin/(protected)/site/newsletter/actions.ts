@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { processCampaign } from "@/lib/newsletter/scheduler";
 import { cancelScheduledCampaign } from "@/lib/newsletter/campaign-save";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function deleteNewsletter(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
 
   const supabase = createAdminClient();
@@ -17,6 +19,7 @@ export async function deleteNewsletter(formData: FormData) {
 }
 
 export async function deleteNewsletters(formData: FormData) {
+  await requireAdmin();
   const ids = formData.getAll("ids").map(String).filter(Boolean);
   if (ids.length === 0) return;
 
@@ -29,6 +32,7 @@ export async function deleteNewsletters(formData: FormData) {
 }
 
 export async function cancelCampaign(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
 
   // SCHEDULED only, enforced in the UPDATE itself — the button is shown only
@@ -41,6 +45,7 @@ export async function cancelCampaign(formData: FormData) {
 }
 
 export async function sendCampaignNow(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 

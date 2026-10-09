@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateOrderCode } from "@/lib/order-code";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export type OrderVendorResult = {
   id: string;
@@ -12,6 +13,7 @@ export type OrderVendorResult = {
 };
 
 export async function searchVendors(query: string): Promise<OrderVendorResult[]> {
+  await requireAdmin();
   const q = query.trim();
   if (!q) return [];
 
@@ -51,6 +53,7 @@ function readOrderFields(formData: FormData) {
 }
 
 export async function createOrder(formData: FormData) {
+  await requireAdmin();
   const fields = readOrderFields(formData);
 
   if (!fields.vendor_id) {
@@ -75,6 +78,7 @@ export async function createOrder(formData: FormData) {
 }
 
 export async function updateOrder(id: string, formData: FormData) {
+  await requireAdmin();
   const fields = readOrderFields(formData);
 
   if (!fields.vendor_id) {
@@ -105,6 +109,7 @@ export async function updateOrder(id: string, formData: FormData) {
 }
 
 export async function deleteOrder(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
 
   const supabase = createAdminClient();

@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { adminDeleteSuppressions, blockedSuppressionMessage } from "@/lib/newsletter/admin-suppressions";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function addProspect(formData: FormData) {
+  await requireAdmin();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const name = String(formData.get("name") ?? "").trim() || null;
 
@@ -30,6 +32,7 @@ export async function addProspect(formData: FormData) {
 }
 
 export async function bulkAddProspects(formData: FormData) {
+  await requireAdmin();
   const raw = String(formData.get("emails") ?? "");
   const lines = raw
     .split(/\r?\n/)
@@ -69,6 +72,7 @@ export async function bulkAddProspects(formData: FormData) {
 }
 
 export async function deleteProspect(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
 
   const supabase = createAdminClient();
@@ -78,6 +82,7 @@ export async function deleteProspect(formData: FormData) {
 }
 
 export async function deleteProspects(formData: FormData) {
+  await requireAdmin();
   const ids = formData.getAll("ids").map(String).filter(Boolean);
   if (ids.length === 0) return;
 
@@ -107,12 +112,14 @@ async function liftSuppressions(ids: string[]) {
 }
 
 export async function deleteSuppression(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await liftSuppressions([id]);
 }
 
 export async function deleteSuppressions(formData: FormData) {
+  await requireAdmin();
   const ids = formData.getAll("ids").map(String).filter(Boolean);
   if (ids.length === 0) return;
   await liftSuppressions(ids);

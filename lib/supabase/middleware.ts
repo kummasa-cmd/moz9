@@ -1,8 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
+import { LEGACY_ADMIN_COOKIE } from "@/lib/admin-session/cookie";
+import { adminGateDecision, verifyAdminCookie } from "@/lib/admin-session/proxy-gate";
+import { legacyAdminSessionKey } from "@/lib/admin-session/token";
 
-const ADMIN_COOKIE = "admin-token";
 const MEMBER_PROTECTED = ["/mypage"];
 
 export async function updateSession(request: NextRequest) {
@@ -10,19 +12,20 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isAdminRoute = pathname.startsWith("/admin");
-  const isAdminLogin = pathname === "/admin/login";
 
   if (isAdminRoute) {
-    const hasAdminToken = request.cookies.has(ADMIN_COOKIE);
+    // Verify the session signature/expiry here (not just cookie presence):
+    // Server Actions run without the (protected) layout's check.
+    const session = await verifyAdminCookie(
+      request.cookies.get(LEGACY_ADMIN_COOKIE)?.value,
+      legacyAdminSessionKey(process.env),
+    );
+    const decision = adminGateDecision(pathname, session);
 
-    if (!isAdminLogin && !hasAdminToken) {
+    if (decision.action === "redirect") {
       const loginUrl = new URL("/admin/login", request.url);
-      loginUrl.searchParams.set("redirect", pathname);
+      loginUrl.searchParams.set("redirect", decision.from);
       return NextResponse.redirect(loginUrl);
-    }
-
-    if (isAdminLogin && hasAdminToken) {
-      return NextResponse.redirect(new URL("/admin", request.url));
     }
 
     return response;

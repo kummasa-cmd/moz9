@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import AdminShell from "@/components/admin/AdminShell";
-import { getAdminSession } from "@/lib/admin-auth";
+import { checkAdmin } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata: Metadata = {
@@ -14,8 +14,10 @@ export default async function AdminLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const adminId = await getAdminSession();
-  if (!adminId) redirect("/admin/login");
+  // Signature, expiry and the admins row (a deleted admin is logged out at once).
+  const session = await checkAdmin();
+  if (!session) redirect("/admin/login");
+  const adminId = session.adminId;
 
   const supabase = createAdminClient();
   const { data: admin } = await supabase

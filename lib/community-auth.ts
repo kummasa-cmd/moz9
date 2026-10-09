@@ -1,10 +1,9 @@
 import type { User } from "@supabase/supabase-js";
-import { getAdminSession } from "./admin-auth";
+import { checkAdmin } from "./admin-guard";
 import { createAdminClient } from "./supabase/admin";
 
 export async function isAdmin(): Promise<boolean> {
-  const session = await getAdminSession();
-  return session !== null;
+  return (await checkAdmin()) !== null;
 }
 
 export async function isColumnMember(userId: string | null): Promise<boolean> {

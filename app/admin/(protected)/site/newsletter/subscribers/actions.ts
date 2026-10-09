@@ -6,8 +6,10 @@ import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { adminSetSubscriberStatus, isAdminStatus } from "@/lib/newsletter/admin-status";
 import { syncSubscriberContact, unsubscribeDeletedContacts } from "@/lib/newsletter/contact-sync";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function addSubscriber(formData: FormData) {
+  await requireAdmin();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const name = String(formData.get("name") ?? "").trim() || null;
 
@@ -40,6 +42,7 @@ export async function addSubscriber(formData: FormData) {
 }
 
 export async function bulkAddSubscribers(formData: FormData) {
+  await requireAdmin();
   const raw = String(formData.get("emails") ?? "");
   const lines = raw
     .split(/\r?\n/)
@@ -87,6 +90,7 @@ export async function bulkAddSubscribers(formData: FormData) {
 // function call); the Resend sync runs afterwards and a failure there is
 // only recorded on the row (resend_sync_error) for retry.
 export async function setSubscriberStatus(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const status = String(formData.get("status") ?? "");
   if (!id || !isAdminStatus(status)) return;
@@ -103,6 +107,7 @@ export async function setSubscriberStatus(formData: FormData) {
 }
 
 export async function deleteSubscriber(formData: FormData) {
+  await requireAdmin();
   const id = String(formData.get("id") ?? "");
 
   const supabase = createAdminClient();
@@ -120,6 +125,7 @@ export async function deleteSubscriber(formData: FormData) {
 }
 
 export async function deleteSubscribers(formData: FormData) {
+  await requireAdmin();
   const ids = formData.getAll("ids").map(String).filter(Boolean);
   if (ids.length === 0) return;
 

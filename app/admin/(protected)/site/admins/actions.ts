@@ -3,11 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAdminSession, hashPassword } from "@/lib/admin-auth";
+import { hashPassword } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-guard";
 
 export async function createAdmin(formData: FormData) {
-  const sessionId = await getAdminSession();
-  if (!sessionId) redirect("/admin/login");
+  await requireAdmin();
 
   const name = String(formData.get("name") ?? "");
   const email = String(formData.get("email") ?? "");
@@ -32,8 +32,7 @@ export async function createAdmin(formData: FormData) {
 }
 
 export async function updateAdmin(id: string, formData: FormData) {
-  const sessionId = await getAdminSession();
-  if (!sessionId) redirect("/admin/login");
+  await requireAdmin();
 
   const name = String(formData.get("name") ?? "");
   const role = String(formData.get("role") ?? "운영자");
@@ -61,8 +60,7 @@ export async function updateAdmin(id: string, formData: FormData) {
 }
 
 export async function deleteAdmin(formData: FormData) {
-  const sessionId = await getAdminSession();
-  if (!sessionId) redirect("/admin/login");
+  const { adminId: sessionId } = await requireAdmin();
 
   const id = String(formData.get("id") ?? "");
 
