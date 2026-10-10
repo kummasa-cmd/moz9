@@ -1,17 +1,15 @@
-// Admin session tokens. SERVER-ONLY.
+// Admin session tokens (admin-session-v2). SERVER-ONLY.
 //
-//   v1 (legacy, currently deployed): HS256 JWT { sub, exp } signed with
-//      SUPABASE_SERVICE_ROLE_KEY. verifyLegacyAdminToken() is the hardened
-//      verifier still used by lib/admin-auth.ts: algorithm pinned to HS256,
-//      no fallback secret.
-//   v2 (admin-session-v2, prepared — NOT wired in Stage 6-D2): HS256 JWT signed
-//      with the dedicated ADMIN_SESSION_SIGNING_SECRET, bound to issuer,
-//      environment audience and token version. v1 tokens are never accepted by
-//      the v2 verifier (migration option A: one re-login).
+// HS256 JWT signed with the dedicated ADMIN_SESSION_SIGNING_SECRET (never the
+// Supabase service-role key), bound to issuer, environment audience and token
+// version. Stage 6-D3b removed the v1 verifier from the runtime: a v1 token
+// ({ sub, exp } signed with SUPABASE_SERVICE_ROLE_KEY, cookie "admin-token")
+// is never accepted — every admin logs in once after the switch (option A).
+// Rolling back to v1 means redeploying the previous build, not a code path.
 //
-// Both verifiers return only the admin id. No other claim (role, authority,
+// The verifier returns only the admin id. No other claim (role, authority,
 // grants…) is ever read from a token: permissions come from the server
-// (lib/sns-lab/authority GrantRegistry), never from the JWT.
+// (lib/admin-guard.ts, lib/sns-lab/authority GrantRegistry), never the JWT.
 
 import { SignJWT, jwtVerify } from "jose";
 
@@ -92,8 +90,6 @@ function classify(error: unknown, token: string): VerifyRejection {
   }
 }
 
-// ── v2 ──────────────────────────────────────────────────────────────────────
-
 export type SignV2Input = {
   adminId: string;
   key: Uint8Array;
@@ -148,36 +144,6 @@ export async function verifyAdminSessionV2(input: VerifyV2Input): Promise<Verify
     if ((payload.iat as number) > epoch(now) + CLOCK_SKEW_SECONDS) return { ok: false, reason: "IAT_IN_FUTURE" };
     if ((payload.exp as number) - (payload.iat as number) > SESSION_TTL_SECONDS) return { ok: false, reason: "LIFETIME_TOO_LONG" };
     if (typeof payload.sub !== "string" || !UUID.test(payload.sub)) return { ok: false, reason: "BAD_SUBJECT" };
-    return { ok: true, adminId: payload.sub };
-  } catch (error) {
-    return { ok: false, reason: classify(error, token) };
-  }
-}
-
-// ── v1 (legacy, current production format) ─────────────────────────────────
-
-/**
- * The legacy signing key: SUPABASE_SERVICE_ROLE_KEY with NO fallback. The old
- * code used a hard-coded string when the variable was missing, which made
- * every session forgeable in that configuration.
- */
-export function legacyAdminSessionKey(env: Readonly<Record<string, string | undefined>>): Uint8Array | null {
-  const value = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!value || value.trim().length === 0) return null;
-  return new TextEncoder().encode(value);
-}
-
-/**
- * Hardened v1 verifier, token-compatible with every session the deployed code
- * issued (HS256, { sub, exp }). Only HS256 is accepted (v1 code accepted any
- * HS* algorithm the key allowed).
- */
-export async function verifyLegacyAdminToken(token: string | undefined | null, key: Uint8Array | null, now?: Date): Promise<VerifyResult> {
-  if (!token) return { ok: false, reason: "NO_TOKEN" };
-  if (!key || key.length === 0) return { ok: false, reason: "NO_KEY" };
-  try {
-    const { payload } = await jwtVerify(token, key, { algorithms: [SESSION_ALG], requiredClaims: ["sub", "exp"], currentDate: now });
-    if (typeof payload.sub !== "string" || payload.sub.length === 0) return { ok: false, reason: "BAD_SUBJECT" };
     return { ok: true, adminId: payload.sub };
   } catch (error) {
     return { ok: false, reason: classify(error, token) };

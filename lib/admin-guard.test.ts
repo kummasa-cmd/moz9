@@ -3,16 +3,22 @@ import assert from "node:assert/strict";
 import { SignJWT } from "jose";
 import { DynamicServerError } from "next/dist/client/components/hooks-server-context";
 import { ADMIN_REAUTH_PATH, AdminUnauthorizedError, checkAdmin, requireAdmin, requireAdminForRoute, type AdminGuardDeps } from "./admin-guard";
-import { legacyCookiePolicy } from "./admin-session/cookie";
-import { adminGateDecision, verifyAdminCookie } from "./admin-session/proxy-gate";
-import { legacyAdminSessionKey, verifyLegacyAdminToken } from "./admin-session/token";
+import { adminSessionV2Config, verifyAdminSessionCookie } from "./admin-session/config";
+import { expiredCookie, expiredLegacyCookie, LEGACY_ADMIN_COOKIE } from "./admin-session/cookie";
+import { adminGateDecision } from "./admin-session/proxy-gate";
+import { signAdminSessionV2, type SessionEnvironment } from "./admin-session/token";
 import { canUploadBoardImage, type UploaderDeps } from "./uploads/uploader-auth";
 import { checkImageFile, handleImageUpload, MAX_IMAGE_BYTES, sniffImageType, type ImageStorage } from "./uploads/image-upload";
 
-// Stage 6-D3a — admin guard against the REAL v1 verifier with FAKE keys.
+// Admin guard against the REAL session verifier (admin-session-v2 since
+// Stage 6-D3b) with FAKE secrets — the same verifyAdminSessionCookie() that
+// lib/admin-auth.ts and the proxy use.
 
 const enc = (s: string) => new TextEncoder().encode(s);
-const KEY = enc("TEST-ONLY-fake-service-role-key-Zr4Tq8Wm2Kx6Lp9Vb1Nc5Hd3");
+const SECRET = "TEST-ONLY-prod-k9Qv2xLm7RtZp4Wc8Yb3Nd6Hf1Js5GaUeXo";
+const SERVICE_ROLE = "eyJhbGciOiJIUzI1NiJ9.TEST-ONLY-fake-service-role.c2ln";
+const ENV = { ADMIN_SESSION_SIGNING_SECRET: SECRET, VERCEL_ENV: "production", SUPABASE_SERVICE_ROLE_KEY: SERVICE_ROLE };
+const KEY = enc(SECRET);
 const OTHER_KEY = enc("TEST-ONLY-attacker-key-Qm3Rv7Tx1Wz5Yb9Kd2Lf6Nh8Pj4Sg");
 const ADMIN = "00000000-0000-4000-8000-0000000000a1";
 const DELETED = "00000000-0000-4000-8000-0000000000d1";
@@ -20,16 +26,22 @@ const UNKNOWN = "00000000-0000-4000-8000-0000000000ff";
 const NOW = new Date("2026-10-09T00:00:00Z");
 const NOW_S = Math.floor(NOW.getTime() / 1000);
 
-/** Exactly what lib/admin-auth.ts createAdminSession issues. */
-const v1Token = (sub: string, key = KEY, exp = NOW_S + 86400) => new SignJWT({ sub }).setProtectedHeader({ alg: "HS256" }).setExpirationTime(exp).sign(key);
+/** What lib/admin-auth.ts createAdminSession issues now. */
+const v2Token = (sub: string, o: { key?: Uint8Array; environment?: SessionEnvironment; now?: Date } = {}) =>
+  signAdminSessionV2({ adminId: sub, key: o.key ?? KEY, environment: o.environment ?? "production", now: o.now ?? NOW });
+/** What the previous (v1) code issued: { sub, exp } signed with the service-role key. */
+const v1Token = (sub: string, key = enc(SERVICE_ROLE), exp = NOW_S + 86400) => new SignJWT({ sub }).setProtectedHeader({ alg: "HS256" }).setExpirationTime(exp).sign(key);
+
+type Env = Record<string, string | undefined>;
+const verify = (cookie: string | undefined, env: Env = ENV) => verifyAdminSessionCookie(cookie, env, NOW);
 
 /** Guard deps whose session comes from the real verifier on a cookie value. */
-function depsFor(cookie: string | undefined, existing = [ADMIN]): AdminGuardDeps & { existsCalls: string[] } {
+function depsFor(cookie: string | undefined, existing = [ADMIN], env: Env = ENV): AdminGuardDeps & { existsCalls: string[] } {
   const existsCalls: string[] = [];
   return {
     existsCalls,
     async getSessionAdminId() {
-      const r = await verifyLegacyAdminToken(cookie, KEY, NOW);
+      const r = await verify(cookie, env);
       return r.ok ? r.adminId : null;
     },
     async adminExists(id) {
@@ -39,27 +51,33 @@ function depsFor(cookie: string | undefined, existing = [ADMIN]): AdminGuardDeps
   };
 }
 
-describe("checkAdmin with the real v1 verifier (security tests 1–8)", () => {
-  it("1 no cookie", async () => assert.equal(await checkAdmin(depsFor(undefined)), null));
-  it("2 admin-token=x", async () => assert.equal(await checkAdmin(depsFor("x")), null));
-  it("3 forged signature", async () => assert.equal(await checkAdmin(depsFor(await v1Token(ADMIN, OTHER_KEY))), null));
-  it("3b old hard-coded fallback secret", async () => assert.equal(await checkAdmin(depsFor(await v1Token(ADMIN, enc("admin-secret-fallback")))), null));
-  it("3c unsigned (alg none)", async () => {
-    const none = `${Buffer.from('{"alg":"none"}').toString("base64url")}.${Buffer.from(JSON.stringify({ sub: ADMIN, exp: NOW_S + 60 })).toString("base64url")}.`;
-    assert.equal(await checkAdmin(depsFor(none)), null);
+const unsigned = () => `${Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url")}.${Buffer.from(JSON.stringify({ sub: ADMIN, exp: NOW_S + 60 })).toString("base64url")}.`;
+
+describe("checkAdmin with the real v2 verifier", () => {
+  it("no cookie", async () => assert.equal(await checkAdmin(depsFor(undefined)), null));
+  it("garbage cookie (admin-token=x style)", async () => assert.equal(await checkAdmin(depsFor("x")), null));
+  it("forged signature", async () => assert.equal(await checkAdmin(depsFor(await v2Token(ADMIN, { key: OTHER_KEY }))), null));
+  it("signed with the service-role key", async () => assert.equal(await checkAdmin(depsFor(await v2Token(ADMIN, { key: enc(SERVICE_ROLE) }))), null));
+  it("signed with the old hard-coded fallback", async () => assert.equal(await checkAdmin(depsFor(await v2Token(ADMIN, { key: enc("admin-secret-fallback") }))), null));
+  it("unsigned (alg none)", async () => assert.equal(await checkAdmin(depsFor(unsigned())), null));
+  it("expired", async () => assert.equal(await checkAdmin(depsFor(await v2Token(ADMIN, { now: new Date((NOW_S - 86400 - 120) * 1000) }))), null));
+  it("issued for another environment (preview → production)", async () => assert.equal(await checkAdmin(depsFor(await v2Token(ADMIN, { environment: "preview" }))), null));
+  it("v1 session (service-role signed, issued before 6-D3b) is rejected", async () => {
+    assert.equal(await checkAdmin(depsFor(await v1Token(ADMIN))), null);
+    assert.equal(await checkAdmin(depsFor(await v1Token(ADMIN, KEY))), null, "even when signed with the v2 secret");
   });
-  it("4 expired", async () => assert.equal(await checkAdmin(depsFor(await v1Token(ADMIN, KEY, NOW_S - 1))), null));
-  it("5 unknown adminId (valid signature)", async () => assert.equal(await checkAdmin(depsFor(await v1Token(UNKNOWN))), null));
-  it("6 deleted admin (valid signature)", async () => {
-    const d = depsFor(await v1Token(DELETED), [ADMIN]);
+  it("secret missing / empty / weak / reused → nobody is authenticated", async () => {
+    const token = await v2Token(ADMIN);
+    const envs: Env[] = [{ VERCEL_ENV: "production" }, { ...ENV, ADMIN_SESSION_SIGNING_SECRET: "" }, { ...ENV, ADMIN_SESSION_SIGNING_SECRET: "short" }, { ...ENV, ADMIN_SESSION_SIGNING_SECRET: SERVICE_ROLE }];
+    for (const env of envs) assert.equal(await checkAdmin(depsFor(token, [ADMIN], env)), null);
+  });
+  it("unknown adminId (valid signature)", async () => assert.equal(await checkAdmin(depsFor(await v2Token(UNKNOWN))), null));
+  it("deleted admin (valid signature)", async () => {
+    const d = depsFor(await v2Token(DELETED), [ADMIN]);
     assert.equal(await checkAdmin(d), null);
     assert.deepEqual(d.existsCalls, [DELETED]);
   });
-  it("7 valid v1 session", async () => assert.deepEqual(await checkAdmin(depsFor(await v1Token(ADMIN))), { adminId: ADMIN }));
-  it("8 extra claims grant nothing beyond { adminId }", async () => {
-    const token = await new SignJWT({ sub: ADMIN, role: "verifier", authority: "issuer", grants: ["verification.issue"] }).setProtectedHeader({ alg: "HS256" }).setExpirationTime(NOW_S + 60).sign(KEY);
-    assert.deepEqual(await checkAdmin(depsFor(token)), { adminId: ADMIN });
-  });
+  it("valid v2 session", async () => assert.deepEqual(await checkAdmin(depsFor(await v2Token(ADMIN))), { adminId: ADMIN }));
   it("no session → the admins table is never queried", async () => {
     const d = depsFor("x");
     await checkAdmin(d);
@@ -92,37 +110,37 @@ describe("requireAdmin / requireAdminForRoute", () => {
     await assert.rejects(requireAdmin({ deps: depsFor(undefined), onFail: "throw" }), AdminUnauthorizedError);
   });
   it("returns the admin for a valid session", async () => {
-    assert.deepEqual(await requireAdmin({ deps: depsFor(await v1Token(ADMIN)) }), { adminId: ADMIN });
+    assert.deepEqual(await requireAdmin({ deps: depsFor(await v2Token(ADMIN)) }), { adminId: ADMIN });
   });
   it("routes get a 401", async () => {
-    const r = await requireAdminForRoute(depsFor(await v1Token(ADMIN, OTHER_KEY)));
+    const r = await requireAdminForRoute(depsFor(await v2Token(ADMIN, { key: OTHER_KEY })));
     assert.equal(r.ok, false);
     assert.equal(!r.ok && r.response.status, 401);
   });
 });
 
-describe("v1 session compatibility and proxy (login / logout regression)", () => {
-  it("a session issued by createAdminSession verifies on every path", async () => {
-    const token = await v1Token(ADMIN);
-    assert.deepEqual(await verifyLegacyAdminToken(token, KEY, NOW), { ok: true, adminId: ADMIN });
-    assert.deepEqual(adminGateDecision("/admin/site/newsletter", await verifyAdminCookie(token, KEY, NOW)), { action: "next" });
+describe("proxy and login / logout use the same verifier and cookie", () => {
+  it("a session issued like createAdminSession passes the proxy", async () => {
+    assert.deepEqual(adminGateDecision("/admin/site/newsletter", await verify(await v2Token(ADMIN))), { action: "next" });
   });
-  it("the key is SUPABASE_SERVICE_ROLE_KEY with no fallback", () => {
-    assert.equal(legacyAdminSessionKey({}), null);
-    assert.deepEqual(legacyAdminSessionKey({ SUPABASE_SERVICE_ROLE_KEY: "k".repeat(40) }), enc("k".repeat(40)));
-  });
-  it("proxy: forged / missing / expired cookies go to login, login page always renders (no loop)", async () => {
-    for (const cookie of [undefined, "x", await v1Token(ADMIN, OTHER_KEY), await v1Token(ADMIN, KEY, NOW_S - 1)]) {
-      assert.equal(adminGateDecision("/admin", await verifyAdminCookie(cookie, KEY, NOW)).action, "redirect");
-      assert.deepEqual(adminGateDecision("/admin/login", await verifyAdminCookie(cookie, KEY, NOW)), { action: "next" });
+  it("forged / missing / expired / v1 / other-env cookies go to login; the login page always renders", async () => {
+    const cookies = [undefined, "x", await v2Token(ADMIN, { key: OTHER_KEY }), await v2Token(ADMIN, { now: new Date((NOW_S - 90000) * 1000) }), await v1Token(ADMIN), await v2Token(ADMIN, { environment: "local" })];
+    for (const cookie of cookies) {
+      assert.equal(adminGateDecision("/admin", await verify(cookie)).action, "redirect");
+      assert.deepEqual(adminGateDecision("/admin/login", await verify(cookie)), { action: "next" });
     }
-    assert.deepEqual(adminGateDecision("/admin/login", await verifyAdminCookie(await v1Token(ADMIN), KEY, NOW)), { action: "next" });
   });
-  it("proxy fails closed without a key", async () => {
-    assert.equal(adminGateDecision("/admin", await verifyAdminCookie(await v1Token(ADMIN), null, NOW)).action, "redirect");
+  it("proxy fails closed without a secret", async () => {
+    assert.equal(adminGateDecision("/admin", await verify(await v2Token(ADMIN), { VERCEL_ENV: "production" })).action, "redirect");
   });
-  it("cookie name/options unchanged (logout deletes the same cookie)", () => {
-    assert.deepEqual(legacyCookiePolicy("production"), { name: "admin-token", options: { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 86400 } });
+  it("the proxy reads the v2 cookie, never the v1 one", () => {
+    assert.equal(adminSessionV2Config(ENV).cookie.name, "__Host-moz9-admin-session");
+    assert.notEqual(adminSessionV2Config(ENV).cookie.name, LEGACY_ADMIN_COOKIE);
+  });
+  it("logout expires the v2 cookie with matching attributes (__Host- needs Secure + Path=/) and the v1 cookie", () => {
+    const cfg = adminSessionV2Config(ENV);
+    assert.deepEqual(expiredCookie(cfg.cookie), { name: "__Host-moz9-admin-session", options: { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 0 } });
+    assert.deepEqual(expiredLegacyCookie("production"), { name: "admin-token", options: { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 0 } });
   });
 });
 

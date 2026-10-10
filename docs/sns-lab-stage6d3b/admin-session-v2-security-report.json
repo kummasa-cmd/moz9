@@ -1,0 +1,450 @@
+{
+ "version": "admin-session-v2",
+ "stage": "6-D3b",
+ "asOf": "2026-10-09T00:00:00.000Z",
+ "fakeOnly": true,
+ "policy": {
+  "secretEnv": "ADMIN_SESSION_SIGNING_SECRET",
+  "algorithm": "HS256 (pinned)",
+  "issuer": "moz9:admin-session",
+  "audience": "moz9:admin:<production|preview|development|local>",
+  "tokenVersion": 2,
+  "ttlSeconds": 86400,
+  "requiredClaims": [
+   "iss",
+   "aud",
+   "sub",
+   "iat",
+   "nbf",
+   "exp",
+   "jti",
+   "sv"
+  ],
+  "cookieV1": {
+   "name": "admin-token",
+   "read": false,
+   "expiredOnLoginLogout": {
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "lax",
+    "path": "/",
+    "maxAge": 0
+   }
+  },
+  "logoutExpires": {
+   "name": "__Host-moz9-admin-session",
+   "options": {
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "lax",
+    "path": "/",
+    "maxAge": 0
+   }
+  },
+  "cookieV2": {
+   "production": {
+    "name": "__Host-moz9-admin-session",
+    "options": {
+     "httpOnly": true,
+     "secure": true,
+     "sameSite": "lax",
+     "path": "/",
+     "maxAge": 86400
+    }
+   },
+   "local": {
+    "name": "moz9-admin-session",
+    "options": {
+     "httpOnly": true,
+     "secure": false,
+     "sameSite": "lax",
+     "path": "/",
+     "maxAge": 86400
+    }
+   }
+  },
+  "legacyMigration": "A — v2 never accepts v1 tokens; every admin logs in once after the switch"
+ },
+ "summary": {
+  "adversarialCases": 44,
+  "blocked": 44,
+  "notBlocked": [],
+  "secretsInReport": 0
+ },
+ "adversarial": [
+  {
+   "id": "01-secret-missing",
+   "title": "ADMIN_SESSION_SIGNING_SECRET not set",
+   "blocked": true,
+   "outcome": "MISSING"
+  },
+  {
+   "id": "02-secret-empty",
+   "title": "empty string",
+   "blocked": true,
+   "outcome": "EMPTY"
+  },
+  {
+   "id": "02b-secret-blank",
+   "title": "whitespace only",
+   "blocked": true,
+   "outcome": "EMPTY"
+  },
+  {
+   "id": "03-secret-short",
+   "title": "too short (12 chars)",
+   "blocked": true,
+   "outcome": "TOO_SHORT"
+  },
+  {
+   "id": "03b-secret-low-entropy",
+   "title": "64 × 'a'",
+   "blocked": true,
+   "outcome": "LOW_ENTROPY"
+  },
+  {
+   "id": "03c-secret-pattern",
+   "title": "repeated pattern, 48 chars",
+   "blocked": true,
+   "outcome": "LOW_ENTROPY"
+  },
+  {
+   "id": "04-secret-fallback",
+   "title": "old hard-coded fallback string",
+   "blocked": true,
+   "outcome": "KNOWN_WEAK"
+  },
+  {
+   "id": "04b-secret-fallback-padded",
+   "title": "fallback string padded to length",
+   "blocked": true,
+   "outcome": "KNOWN_WEAK"
+  },
+  {
+   "id": "05-secret-is-service-role",
+   "title": "service-role key reused",
+   "blocked": true,
+   "outcome": "LOOKS_LIKE_SUPABASE_KEY"
+  },
+  {
+   "id": "05a-secret-is-service-role-any-format",
+   "title": "service-role key (non-JWT format) reused",
+   "blocked": true,
+   "outcome": "REUSES_OTHER_SECRET"
+  },
+  {
+   "id": "05b-secret-is-cron",
+   "title": "CRON_SECRET reused",
+   "blocked": true,
+   "outcome": "REUSES_OTHER_SECRET"
+  },
+  {
+   "id": "05c-secret-new-supabase-format",
+   "title": "sb_secret_ key",
+   "blocked": true,
+   "outcome": "LOOKS_LIKE_SUPABASE_KEY"
+  },
+  {
+   "id": "04c-service-role-is-never-a-session-key",
+   "title": "service-role key set, session secret missing → no session key at all",
+   "blocked": true,
+   "outcome": "MISSING"
+  },
+  {
+   "id": "04d-fallback-signed-token",
+   "title": "v1 token signed with the old fallback (runtime)",
+   "blocked": true,
+   "outcome": "BAD_SIGNATURE",
+   "token": "sha256:92127777b77ad92a"
+  },
+  {
+   "id": "04e-fallback-signed-v2-no-secret",
+   "title": "v2 token signed with the old fallback, secret missing (runtime)",
+   "blocked": true,
+   "outcome": "NO_KEY",
+   "token": "sha256:20bfda01806c8cb1"
+  },
+  {
+   "id": "05d-service-role-signed-v2",
+   "title": "v2-shaped token signed with the service-role key",
+   "blocked": true,
+   "outcome": "BAD_SIGNATURE",
+   "token": "sha256:58e768410fc7ece7"
+  },
+  {
+   "id": "06-tampered",
+   "title": "payload changed after signing",
+   "blocked": true,
+   "outcome": "BAD_SIGNATURE",
+   "token": "sha256:d209f6406d4519b9"
+  },
+  {
+   "id": "06b-tampered-signature",
+   "title": "signature byte flipped",
+   "blocked": true,
+   "outcome": "BAD_SIGNATURE",
+   "token": "sha256:baccaa6f0702c3f5"
+  },
+  {
+   "id": "07-expired",
+   "title": "verified 1s after exp + skew",
+   "blocked": true,
+   "outcome": "EXPIRED",
+   "token": "sha256:16b98bd42df4a6c7"
+  },
+  {
+   "id": "07b-lifetime-too-long",
+   "title": "exp 30 days after iat",
+   "blocked": true,
+   "outcome": "LIFETIME_TOO_LONG",
+   "token": "sha256:bb49e4706fb90e6c"
+  },
+  {
+   "id": "08-future-iat",
+   "title": "iat 10 min in the future (nbf now)",
+   "blocked": true,
+   "outcome": "IAT_IN_FUTURE",
+   "token": "sha256:d3caafdc622d771a"
+  },
+  {
+   "id": "08b-future-issued",
+   "title": "token issued 10 min in the future",
+   "blocked": true,
+   "outcome": "NOT_YET_VALID",
+   "token": "sha256:9aa67086c02a3b59"
+  },
+  {
+   "id": "09-wrong-issuer",
+   "title": "iss of another app",
+   "blocked": true,
+   "outcome": "BAD_ISSUER",
+   "token": "sha256:9f72c43527b751de"
+  },
+  {
+   "id": "09b-wrong-audience",
+   "title": "aud of another app",
+   "blocked": true,
+   "outcome": "BAD_AUDIENCE",
+   "token": "sha256:787114ce7ed89596"
+  },
+  {
+   "id": "09c-missing-issuer",
+   "title": "no iss",
+   "blocked": true,
+   "outcome": "BAD_ISSUER",
+   "token": "sha256:7bde53816872f3ac"
+  },
+  {
+   "id": "10-wrong-alg-hs512",
+   "title": "HS512 with the right key",
+   "blocked": true,
+   "outcome": "BAD_ALGORITHM",
+   "token": "sha256:6bf6c4e006de489a"
+  },
+  {
+   "id": "10b-alg-confusion-rs256",
+   "title": "RS256 header over an HMAC signature",
+   "blocked": true,
+   "outcome": "BAD_ALGORITHM",
+   "token": "sha256:499580a828b09250"
+  },
+  {
+   "id": "10c-v1-hs384",
+   "title": "v1-shaped HS384 token (runtime)",
+   "blocked": true,
+   "outcome": "BAD_ALGORITHM",
+   "token": "sha256:2e33a436a3d614f8"
+  },
+  {
+   "id": "11-unsigned",
+   "title": "alg none, empty signature (v2)",
+   "blocked": true,
+   "outcome": "BAD_ALGORITHM",
+   "token": "sha256:b5d499e1255b0c8a"
+  },
+  {
+   "id": "11b-unsigned-runtime",
+   "title": "alg none, empty signature (runtime)",
+   "blocked": true,
+   "outcome": "BAD_ALGORITHM",
+   "token": "sha256:b5d499e1255b0c8a"
+  },
+  {
+   "id": "12-other-env-same-secret",
+   "title": "preview token in production (same secret)",
+   "blocked": true,
+   "outcome": "BAD_AUDIENCE",
+   "token": "sha256:17527972dfeb960c"
+  },
+  {
+   "id": "12b-other-env-own-secret",
+   "title": "preview token in production (separate secrets)",
+   "blocked": true,
+   "outcome": "BAD_SIGNATURE",
+   "token": "sha256:43d0849ed7b2e386"
+  },
+  {
+   "id": "12c-local-token-in-production",
+   "title": "local token in production",
+   "blocked": true,
+   "outcome": "BAD_AUDIENCE",
+   "token": "sha256:3d5afe29631cedff"
+  },
+  {
+   "id": "13-version-1",
+   "title": "sv = 1",
+   "blocked": true,
+   "outcome": "BAD_VERSION",
+   "token": "sha256:a18ee86fb919bc93"
+  },
+  {
+   "id": "13b-version-string",
+   "title": "sv = \"2\"",
+   "blocked": true,
+   "outcome": "BAD_VERSION",
+   "token": "sha256:42b43c65a85b38ad"
+  },
+  {
+   "id": "13c-version-missing",
+   "title": "no sv claim",
+   "blocked": true,
+   "outcome": "MISSING_CLAIM",
+   "token": "sha256:a9953b7e083a6860"
+  },
+  {
+   "id": "13d-bad-subject",
+   "title": "sub is not a UUID",
+   "blocked": true,
+   "outcome": "BAD_SUBJECT",
+   "token": "sha256:31aad30949adaf91"
+  },
+  {
+   "id": "14-deleted-admin",
+   "title": "valid signature, admin row deleted",
+   "blocked": true,
+   "outcome": "checkAdmin → null"
+  },
+  {
+   "id": "15-claims-escalation",
+   "title": "role/authority/grants claims in a validly signed token",
+   "blocked": true,
+   "outcome": "claims ignored; verifier and checkAdmin return the admin id only"
+  },
+  {
+   "id": "17-v2-no-key",
+   "title": "v2 config with missing secret",
+   "blocked": true,
+   "outcome": "MISSING"
+  },
+  {
+   "id": "17b-guard-throws",
+   "title": "session reader throws",
+   "blocked": true,
+   "outcome": "checkAdmin → null"
+  },
+  {
+   "id": "17c-proxy-no-key",
+   "title": "proxy, valid v2 token but secret missing",
+   "blocked": true,
+   "outcome": "{\"action\":\"redirect\",\"to\":\"login\",\"from\":\"/admin/site/newsletter\"}"
+  },
+  {
+   "id": "17d-proxy-forged-cookie",
+   "title": "proxy, cookie admin-token=x (was let through before)",
+   "blocked": true,
+   "outcome": "{\"action\":\"redirect\",\"to\":\"login\",\"from\":\"/admin/site/newsletter\"}"
+  },
+  {
+   "id": "18-legacy-in-v2",
+   "title": "v1 token (service-role signed / v2-secret signed) at runtime",
+   "blocked": true,
+   "outcome": "BAD_SIGNATURE / MISSING_CLAIM"
+  }
+ ],
+ "compatibility": {
+  "v1SessionAcceptedAfterSwitch": false,
+  "v1CookieNameRead": false,
+  "v2SessionAccepted": true,
+  "v2SessionAcceptedByProxy": true,
+  "previewSessionAcceptedInProduction": false,
+  "v2SessionAcceptedWithoutSecret": false
+ },
+ "proxyGate": [
+  {
+   "path": "/admin",
+   "session": "valid",
+   "decision": {
+    "action": "next"
+   }
+  },
+  {
+   "path": "/admin",
+   "session": "forged",
+   "decision": {
+    "action": "redirect",
+    "to": "login",
+    "from": "/admin"
+   }
+  },
+  {
+   "path": "/admin/login",
+   "session": "valid",
+   "decision": {
+    "action": "next"
+   }
+  },
+  {
+   "path": "/admin/login",
+   "session": "forged",
+   "decision": {
+    "action": "next"
+   }
+  },
+  {
+   "path": "/admin/login",
+   "session": "none",
+   "decision": {
+    "action": "next"
+   }
+  }
+ ],
+ "redirects": [
+  {
+   "input": "/admin/site/newsletter?tab=1",
+   "output": "/admin/site/newsletter?tab=1"
+  },
+  {
+   "input": "/admin",
+   "output": "/admin"
+  },
+  {
+   "input": "https://evil.example",
+   "output": "/admin"
+  },
+  {
+   "input": "//evil.example",
+   "output": "/admin"
+  },
+  {
+   "input": "/\\evil.example",
+   "output": "/admin"
+  },
+  {
+   "input": "/administrator",
+   "output": "/admin"
+  },
+  {
+   "input": "/admin/login",
+   "output": "/admin"
+  },
+  {
+   "input": "javascript:alert(1)",
+   "output": "/admin"
+  },
+  {
+   "input": "",
+   "output": "/admin"
+  }
+ ],
+ "digest": "5e75fe5e1d3112260ceccdbf8d833fbaa528b9ebc1d6e0b726802e934bf42d72"
+}

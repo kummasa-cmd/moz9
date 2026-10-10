@@ -1,18 +1,15 @@
 import { cookies } from "next/headers";
-import { SignJWT } from "jose";
 import bcrypt from "bcryptjs";
-import { legacyCookiePolicy } from "@/lib/admin-session/cookie";
-import { legacyAdminSessionKey, verifyLegacyAdminToken } from "@/lib/admin-session/token";
+import { AdminSessionConfigError, adminSessionV2Config, verifyAdminSessionCookie } from "@/lib/admin-session/config";
+import { expiredCookie, expiredLegacyCookie } from "@/lib/admin-session/cookie";
+import { signAdminSessionV2 } from "@/lib/admin-session/token";
 
-// Session format v1 (unchanged token format, see lib/admin-session/token.ts).
-// Stage 6-D2 hardening: no hard-coded fallback secret (a missing key now
-// fails closed) and the verifier accepts HS256 only. The switch to the
-// dedicated-secret v2 format is a separate, approved step
-// (docs/sns-lab-admin-session.md).
-
-function getSecret(): Uint8Array | null {
-  return legacyAdminSessionKey(process.env);
-}
+// Admin session = admin-session-v2 (lib/admin-session/): HS256 JWT signed with
+// ADMIN_SESSION_SIGNING_SECRET, bound to the deployment environment, in the
+// __Host-moz9-admin-session cookie. A missing or rejected secret fails closed:
+// no session is issued (AdminSessionConfigError) and none is accepted.
+// v1 sessions (cookie "admin-token", signed with the service-role key) are
+// not accepted; login and logout expire that cookie.
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
@@ -26,27 +23,28 @@ export async function verifyPassword(
 }
 
 export async function createAdminSession(adminId: string) {
-  const secret = getSecret();
-  if (!secret) throw new Error("Admin session signing key is not configured");
+  const config = adminSessionV2Config(process.env);
+  if (!config.key) throw new AdminSessionConfigError(config.secretStatus === "ok" ? "MISSING" : config.secretStatus);
 
-  const token = await new SignJWT({ sub: adminId })
-    .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime("24h")
-    .sign(secret);
+  const token = await signAdminSessionV2({ adminId, key: config.key, environment: config.environment });
 
-  const { name, options } = legacyCookiePolicy(process.env.NODE_ENV);
   const cookieStore = await cookies();
-  cookieStore.set(name, token, options);
+  cookieStore.set(config.cookie.name, token, config.cookie.options);
+  const legacy = expiredLegacyCookie(config.environment);
+  cookieStore.set(legacy.name, "", legacy.options);
 }
 
 export async function getAdminSession(): Promise<string | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get(legacyCookiePolicy(process.env.NODE_ENV).name)?.value;
-  const result = await verifyLegacyAdminToken(token, getSecret());
+  const config = adminSessionV2Config(process.env);
+  const result = await verifyAdminSessionCookie(cookieStore.get(config.cookie.name)?.value, process.env);
   return result.ok ? result.adminId : null;
 }
 
 export async function clearAdminSession() {
   const cookieStore = await cookies();
-  cookieStore.delete(legacyCookiePolicy(process.env.NODE_ENV).name);
+  const config = adminSessionV2Config(process.env);
+  for (const { name, options } of [expiredCookie(config.cookie), expiredLegacyCookie(config.environment)]) {
+    cookieStore.set(name, "", options);
+  }
 }

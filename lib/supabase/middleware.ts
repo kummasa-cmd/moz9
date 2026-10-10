@@ -1,9 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
-import { LEGACY_ADMIN_COOKIE } from "@/lib/admin-session/cookie";
-import { adminGateDecision, verifyAdminCookie } from "@/lib/admin-session/proxy-gate";
-import { legacyAdminSessionKey } from "@/lib/admin-session/token";
+import { adminSessionV2Config, verifyAdminSessionCookie } from "@/lib/admin-session/config";
+import { adminGateDecision } from "@/lib/admin-session/proxy-gate";
 
 const MEMBER_PROTECTED = ["/mypage"];
 
@@ -16,9 +15,9 @@ export async function updateSession(request: NextRequest) {
   if (isAdminRoute) {
     // Verify the session signature/expiry here (not just cookie presence):
     // Server Actions run without the (protected) layout's check.
-    const session = await verifyAdminCookie(
-      request.cookies.get(LEGACY_ADMIN_COOKIE)?.value,
-      legacyAdminSessionKey(process.env),
+    const session = await verifyAdminSessionCookie(
+      request.cookies.get(adminSessionV2Config(process.env).cookie.name)?.value,
+      process.env,
     );
     const decision = adminGateDecision(pathname, session);
 
